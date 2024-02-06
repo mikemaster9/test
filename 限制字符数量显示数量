@@ -1,0 +1,50 @@
+(function($) {
+    $.fn.limitInput = function(options) {
+        // 默认设置与自定义设置合并
+        var settings = $.extend({
+            maxChars: 10, // 默认最大字符数
+            counterElement: $('<div></div>'), // 计数器元素
+            counterStyle: 'position: absolute; right: 0; top: 100%; text-align: right;' // 默认样式
+        }, options);
+
+        // 对每个匹配的元素应用功能
+        return this.each(function() {
+            var $this = $(this);
+            var $counter = settings.counterElement.clone();
+            $counter.attr('style', settings.counterStyle); // 应用样式
+
+            // 初始化计数器位置和值
+            updateCounter($this.val().length);
+
+            // 插入计数器到input元素后
+            $this.after($counter);
+            $this.css('position', 'relative'); // 确保父元素是相对定位
+
+            // 绑定input事件
+            $this.on('input', function() {
+                var textLength = $this.val().length;
+
+                // 限制字符数
+                if (textLength > settings.maxChars) {
+                    $this.val($this.val().substring(0, settings.maxChars));
+                    textLength = settings.maxChars; // 更新长度为最大字符数
+                }
+
+                // 更新计数器
+                updateCounter(textLength);
+            });
+
+            // 更新计数器的显示
+            function updateCounter(length) {
+                $counter.text(length + '/' + settings.maxChars);
+            }
+        });
+    };
+}(jQuery));
+
+// 使用插件
+$(document).ready(function() {
+    $('input#yourInputId').limitInput({
+        maxChars: 15 // 自定义最大字符数为15
+    });
+});
