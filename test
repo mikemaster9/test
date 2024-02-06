@@ -48,3 +48,46 @@
         return this;
     };
 })(jQuery);
+
+
+(function($) {
+    // 插件构造函数
+    function InputRestrictor(element, options) {
+        this.element = element;
+        this.options = $.extend({}, $.fn.inputRestrictor.defaults, options);
+        this.init();
+    }
+
+    // 默认选项
+    $.fn.inputRestrictor.defaults = {
+        rules: {}
+    };
+
+    // 插件原型定义，包含初始化方法
+    InputRestrictor.prototype.init = function() {
+        var self = this;
+        // 遍历规则并应用
+        $(this.element).find('input').each(function() {
+            var input = $(this);
+            $.each(self.options.rules, function(key, regex) {
+                if (input.hasClass(key)) {
+                    input.on('input', function() {
+                        var re = new RegExp(regex);
+                        if (!re.test(input.val())) {
+                            input.val(input.val().replace(re, ''));
+                        }
+                    });
+                }
+            });
+        });
+    };
+
+    // 将插件添加到jQuery.fn对象，使其可用于所有jQuery对象
+    $.fn.inputRestrictor = function(options) {
+        return this.each(function() {
+            if (!$.data(this, "plugin_inputRestrictor")) {
+                $.data(this, "plugin_inputRestrictor", new InputRestrictor(this, options));
+            }
+        });
+    };
+})(jQuery);
