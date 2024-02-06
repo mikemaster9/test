@@ -216,3 +216,51 @@
     };
 })(jQuery);
 
+(function($) {
+    // 插件构造函数
+    function NumericInput(element, options) {
+        this.element = element;
+        this.options = $.extend({}, NumericInput.defaults, options);
+        this.init();
+    }
+
+    // 默认选项
+    NumericInput.defaults = {};
+
+    // 插件原型定义
+    NumericInput.prototype = {
+        init: function() {
+            this.bindEvents();
+        },
+
+        bindEvents: function() {
+            $(this.element).on('input', this.validateInput.bind(this));
+        },
+
+        validateInput: function(event) {
+            var $input = $(event.target);
+            var value = $input.val();
+
+            // 允许数字、小数点，但不允许多个小数点或前导零（除非是小数的一部分）
+            var validValue = value.replace(/[^0-9.]/g, '') // 移除非数字和非小数点
+                                  .replace(/(\..*)\./g, '$1') // 只保留第一个小数点
+                                  .replace(/^0([0-9])/g, '$1') // 移除非小数的前导零
+                                  .replace(/^0+$/g, '0'); // 如果全是零，保留一个零
+
+            // 如果经过处理后的值与原始值不同，则更新输入框的值
+            if (validValue !== value) {
+                $input.val(validValue);
+            }
+        }
+    };
+
+    // 将插件添加到jQuery.fn对象
+    $.fn.numericInput = function(options) {
+        return this.each(function() {
+            if (!$.data(this, 'plugin_numericInput')) {
+                $.data(this, 'plugin_numericInput', new NumericInput(this, options));
+            }
+        });
+    };
+})(jQuery);
+
