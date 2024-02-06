@@ -161,3 +161,58 @@
         });
     };
 })(jQuery);
+
+(function($) {
+    // 插件名称及默认配置
+    $.fn.inputRestrictor = function(options) {
+        var defaults = {
+            rules: {
+                'only-letters': /^[A-Za-z]+$/,
+                'only-digits': /^\d+$/,
+                'decimal-format': /^(0|[1-9]\d*)(\.\d+)?$/ // 支持小数格式
+            },
+            parentSelector: 'body'
+        };
+
+        var settings = $.extend(true, {}, defaults, options);
+        var composing = false; // 标记IME输入状态
+
+        // 内部方法：验证输入值
+        function validateInput($element) {
+            if (composing) return; // 如果正在使用IME输入，不执行验证
+            var value = $element.val(); // 当前值
+            validateLength($element, value); // 验证字符长度限制
+            validateDecimalFormat($element, value); // 特定的小数格式验证
+            validateRules($element, value); // 应用正则表达式规则
+        }
+
+        // 内部方法：验证特定的小数格式
+        function validateDecimalFormat($element, value) {
+            // 检查是否有decimal-format类，并且值不为空
+            if ($element.hasClass('decimal-format') && value) {
+                // 如果值以0开头且后面紧跟非零数字或小数点，则允许；否则，纠正格式
+                var isValidDecimal = /^(0(\.\d+)?|[1-9]\d*(\.\d+)?)$/.test(value);
+                if (!isValidDecimal) {
+                    var correctedValue = value.replace(/^(0+)(\d)/, '$2'); // 移除多余的前导零
+                    $element.val(correctedValue);
+                }
+            }
+        }
+
+        // 使用事件委托绑定事件到父元素
+        $(settings.parentSelector)
+            .on('compositionstart', this.selector, function() {
+                composing = true;
+            })
+            .on('compositionend', this.selector, function() {
+                composing = false;
+                validateInput($(this)); // 手动触发验证
+            })
+            .on('input', this.selector, function() {
+                validateInput($(this));
+            });
+
+        return this; // 保持jQuery链式调用
+    };
+})(jQuery);
+
