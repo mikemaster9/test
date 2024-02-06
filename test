@@ -91,3 +91,73 @@
         });
     };
 })(jQuery);
+
+(function($) {
+    // 插件构造函数
+    function InputRestrictor(element, options) {
+        this.element = element;
+        this.options = $.extend({}, InputRestrictor.defaults, options);
+        this.init();
+    }
+
+    // 默认选项，包括规则和父选择器
+    InputRestrictor.defaults = {
+        rules: {
+            'only-letters': /^[A-Za-z]+$/,
+            'only-digits': /^\d+$/
+        },
+        parentSelector: 'body' // 默认使用body作为事件委托的父选择器
+    };
+
+    // 插件原型定义
+    InputRestrictor.prototype = {
+        init: function() {
+            this.bindEvents();
+        },
+
+        bindEvents: function() {
+            var self = this;
+            $(self.options.parentSelector).on('input', self.element, function(event) {
+                self.handleInput(event);
+            });
+        },
+
+        handleInput: function(event) {
+            var $input = $(event.target);
+            var classes = $input.attr('class').split(/\s+/);
+
+            // 处理data-max属性
+            this.applyDataMax($input);
+
+            // 应用正则表达式规则
+            $.each(classes, function(index, className) {
+                if (self.options.rules[className]) {
+                    var regex = new RegExp(self.options.rules[className]);
+                    if (!regex.test($input.val())) {
+                        var matched = $input.val().match(regex);
+                        $input.val(matched ? matched[0] : '');
+                    }
+                }
+            });
+        },
+
+        applyDataMax: function($input) {
+            var dataMax = $input.data('max');
+            if (dataMax !== undefined && $.isNumeric(dataMax)) {
+                var currentValue = parseInt($input.val(), 10);
+                if (currentValue > dataMax) {
+                    $input.val(dataMax);
+                }
+            }
+        }
+    };
+
+    // 将插件添加到jQuery.fn对象
+    $.fn.inputRestrictor = function(options) {
+        return this.each(function() {
+            if (!$.data(this, 'plugin_inputRestrictor')) {
+                $.data(this, 'plugin_inputRestrictor', new InputRestrictor(this, options));
+            }
+        });
+    };
+})(jQuery);
