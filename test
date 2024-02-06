@@ -1,0 +1,50 @@
+(function($) {
+    // 插件名称及默认配置
+    $.fn.inputRestrictor = function(options) {
+        // 默认规则配置
+        var defaults = {
+            // 示例规则
+            rules: {
+                'only-letters': /^[A-Za-z]+$/,
+                'only-digits': /^\d+$/,
+                // 可以添加更多规则...
+            },
+            // 指定一个父选择器，默认为'body'
+            parentSelector: 'body'
+        };
+
+        // 将默认规则和用户定义的规则合并
+        var settings = $.extend(true, {}, defaults, options);
+
+        // 使用事件委托绑定input事件到父元素
+        $(settings.parentSelector).on('input', this.selector, function() {
+            var $this = $(this); // 当前触发事件的元素
+            var classes = $this.attr('class').split(/\s+/); // 获取当前元素的class列表
+
+            // 检查是否需要根据data-max属性限制数字的最大值
+            var dataMax = $this.data('max');
+            if (dataMax !== undefined && $.isNumeric(dataMax)) {
+                var currentValue = parseInt($this.val(), 10);
+                if (currentValue > dataMax) {
+                    $this.val(dataMax); // 设置为最大允许的值
+                    return; // 早期返回，防止进一步处理
+                }
+            }
+
+            // 遍历class列表，检查是否匹配已定义的规则
+            $.each(classes, function(index, className) {
+                if(settings.rules[className]) {
+                    var regex = new RegExp(settings.rules[className]);
+                    if(!regex.test($this.val())) {
+                        // 如果当前输入不匹配正则表达式，则移除不匹配的字符
+                        var matched = $this.val().match(regex);
+                        $this.val(matched ? matched[0] : '');
+                    }
+                }
+            });
+        });
+
+        // 保持jQuery链式调用
+        return this;
+    };
+})(jQuery);
