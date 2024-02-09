@@ -1,0 +1,67 @@
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using Svg;
+
+class SvgToIcoConverter
+{
+    public static void ConvertSvgToIco(string svgFilePath, string icoFilePath, int iconSize)
+    {
+        var svgDocument = SvgDocument.Open(svgFilePath);
+        var bitmap = svgDocument.Draw(iconSize, iconSize);
+        SaveAsIcon(bitmap, icoFilePath);
+    }
+
+    private static void SaveAsIcon(Bitmap bmp, string filename)
+    {
+        using (var fs = new FileStream(filename, FileMode.Create, FileAccess.Write))
+        {
+            // Save the bitmap to a memory stream as PNG
+            var ms = new MemoryStream();
+            bmp.Save(ms, ImageFormat.Png);
+
+            var iconWriter = new BinaryWriter(fs);
+            // 0-1 reserved, 0
+            iconWriter.Write((byte)0);
+            iconWriter.Write((byte)0);
+
+            // 2-3 image type, 1 = icon, 2 = cursor
+            iconWriter.Write((short)1);
+
+            // 4-5 number of images
+            iconWriter.Write((short)1);
+
+            // image entry 1
+            // 0 image width
+            iconWriter.Write((byte)bmp.Width);
+            // 1 image height
+            iconWriter.Write((byte)bmp.Height);
+
+            // 2 number of colors
+            iconWriter.Write((byte)0);
+
+            // 3 reserved
+            iconWriter.Write((byte)0);
+
+            // 4-5 color planes
+            iconWriter.Write((short)0);
+
+            // 6-7 bits per pixel
+            iconWriter.Write((short)32);
+
+            // 8-11 size of image data
+            iconWriter.Write((int)ms.Length);
+
+            // 12-15 offset of image data
+            iconWriter.Write((int)(6 + 16));
+
+            // write image data
+            // png data must contain the whole png data file
+            fs.Write(ms.ToArray(), 0, (int)ms.Length);
+        }
+    }
+}
+
+// Example usage:
+// SvgToIcoConverter.ConvertSvgToIco("path/to/your/source.svg", "path/to/your/destination.ico", 256);
