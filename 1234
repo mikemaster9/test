@@ -1,0 +1,44 @@
+<Window x:Class="Navigation_Drawer_App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Navigation_Drawer_App"
+        mc:Ignorable="d"
+        Title="MainWindow" 
+        Height="600" 
+        Width="800"
+        ResizeMode="NoResize"
+        Topmost="True"
+        WindowStyle="None"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <!-- Your existing resources here -->
+        <!-- Toggle Button Style Template, Text font style, Tooltip Style Template, App Close Button Style Template, etc. -->
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        
+        <!-- Navigation Panel -->
+        <Grid x:Name="nav_pnl" Background="#2E333A" Width="200">
+            <StackPanel x:Name="st_pnl" VerticalAlignment="Top">
+                <!-- Navigation buttons here -->
+                <!-- Example Navigation Button -->
+                <!-- Make sure to add Click event handlers in your .cs file for these buttons -->
+                <Button Content="Home" Height="40" Margin="10" Click="HomeButton_Click"/>
+                <Button Content="Settings" Height="40" Margin="10" Click="SettingsButton_Click"/>
+                <!-- Add more buttons as needed -->
+            </StackPanel>
+        </Grid>
+
+        <!-- Main Content Area for Tabs -->
+        <TabControl x:Name="mainTabControl" Grid.Column="1" Margin="10">
+            <!-- Dynamic tabs will be added here -->
+        </TabControl>
+    </Grid>
+</Window>
