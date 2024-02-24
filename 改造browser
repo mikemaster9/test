@@ -74,5 +74,28 @@ private void OpenUrlInNewTab(string url)
 为了在每个标签页旁边添加关闭按钮，您需要自定义`TabItem`的头部。这涉及到在`OpenUrlInNewTab`方法中创建一个包含文本和关闭按钮的小型布局（例如，使用`StackPanel`）作为`TabItem`的头部。
 
 ### 总结
+private void OpenUrlInNewTab(string url, string title)
+{
+    // 检查是否已存在具有相同标题的TabItem
+    var existingTab = browserTabControl.Items.Cast<TabItem>().FirstOrDefault(tab => tab.Header.ToString().Equals(title, StringComparison.OrdinalIgnoreCase));
+
+    if (existingTab == null)
+    {
+        var webBrowser = new CefSharp.Wpf.ChromiumWebBrowser(url);
+        var newTab = new TabItem
+        {
+            Header = title, // 设置TabItem的标题为传入的标题
+            Content = webBrowser
+        };
+
+        browserTabControl.Items.Add(newTab);
+        browserTabControl.SelectedItem = newTab;
+    }
+    else
+    {
+        // 如果已存在，选中该TabItem
+        browserTabControl.SelectedItem = existingTab;
+    }
+}
 
 以上步骤展示了如何将指定的XAML代码改造，以支持通过点击按钮使用CefSharp.Wpf在新的Tab中打开指定网址的基本功能。根据实际情况，您可能需要调整布局、样式或逻辑以满足特定需求。
