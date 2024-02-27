@@ -1,0 +1,61 @@
+将跑马灯功能封装为jQuery插件，可以让我们更方便地在多个项目中复用这个功能。以下是一个简单的跑马灯jQuery插件的示例：
+
+1. **插件代码**：
+
+```javascript
+(function($) {
+    $.fn.marquee = function(options) {
+        // 默认设置
+        var settings = $.extend({
+            speed: 5000,
+            direction: 'left',
+            startFrom: '100%'
+        }, options );
+
+        return this.each(function() {
+            var $this = $(this); // 当前元素
+            var $marqueeContent = $this.children(); // 假设跑马灯的内容是当前元素的子元素
+            var marqueeWidth = $marqueeContent.width(); // 内容宽度
+
+            // 设置初始CSS
+            $this.css({overflow: 'hidden', whiteSpace: 'nowrap'});
+            $marqueeContent.css({display: 'inline-block', position: 'relative', left: settings.startFrom});
+
+            // 动画函数
+            function marqueeAnimate() {
+                var animateProps = {};
+                animateProps['left'] = settings.direction === 'left' ? '-=' + marqueeWidth : '+=' + marqueeWidth;
+
+                $marqueeContent.animate(animateProps, settings.speed, 'linear', function() {
+                    $marqueeContent.css('left', settings.startFrom);
+                    marqueeAnimate(); // 循环动画
+                });
+            }
+
+            marqueeAnimate(); // 启动动画
+        });
+    };
+}(jQuery));
+```
+
+2. **如何使用**：
+
+首先，确保在你的HTML中已经包含了jQuery库和上面的插件代码。然后，你可以这样调用插件：
+
+```html
+<div id="marqueeContainer">
+  <div>这里是需要滚动的内容，可以是文本也可以是图片。</div>
+</div>
+
+<script>
+$(document).ready(function(){
+  $('#marqueeContainer').marquee({
+    speed: 10000, // 滚动速度，单位毫秒
+    direction: 'left', // 滚动方向
+    startFrom: '100%' // 开始位置
+  });
+});
+</script>
+```
+
+通过这种方式，你可以很容易地在任何元素上应用跑马灯效果，并自定义其速度、方向和开始位置。这个插件的好处是它提供了灵活性，允许你根据需要调整这些参数，从而适用于不同的使用场景。
