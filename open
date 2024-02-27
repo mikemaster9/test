@@ -76,4 +76,79 @@ $(document).ready(function() {
 </script>
 ```
 
-这样，你就可以在项目中多次复用这个弹窗功能，只需通过不同的选择器调用`customPopup`插件，并根据需要传入不同的选项即可。通过封装成插件，代码变得更加模块化和可维护，同时也方便在不同项目中复用。
+这样，你就可以在项目中多次复用这个弹窗功能，只需通过
+不同的选择器调用`customPopup`插件，并根据需要传
+入不同的选项即可。通过封装成插件，代码变得更加
+模块化和可维护，同时也方便在不同项目中复用。
+如果你想在其他方法内调用封装好的弹窗插件，可以将弹窗逻辑单独封装成一个可调用的函数或方法，而不是绑定到特定的事件上。这样，你可以在任何地方通过直接调用这个函数来触发弹窗。下面是如何修改上面的示例，以便在其他方法中调用弹窗。
+
+### 修改插件以支持直接调用
+
+首先，修改插件以便可以从外部直接调用弹窗显示的逻辑，而不是只能通过事件触发：
+
+```javascript
+(function($) {
+    var isPopupShowing = false; // 跟踪弹窗显示状态
+
+    // 将showPopup作为独立方法
+    function showPopup(options) {
+        if (isPopupShowing) {
+            console.log("已有弹窗在显示，等待上一个弹窗关闭后再尝试。");
+            return; // 如果已有弹窗在显示，则直接返回
+        }
+
+        var settings = $.extend({
+            content: '默认内容',
+            width: '200px',
+            height: '200px',
+            timeout: 20000, // 20秒后自动关闭
+            onClose: null // 关闭回调
+        }, options);
+
+        isPopupShowing = true; // 标记弹窗正在显示
+
+        layer.open({
+            type: 1,
+            content: settings.content,
+            area: [settings.width, settings.height],
+            offset: 'rb',
+            time: settings.timeout,
+            shade: 0, // 不显示遮罩
+            end: function(){
+                isPopupShowing = false; // 弹窗关闭，更新状态
+                if (typeof settings.onClose === 'function') {
+                    settings.onClose(); // 调用关闭回调函数
+                }
+            }
+        });
+    }
+
+    // 暴露方法给外部调用
+    $.customPopup = showPopup;
+}(jQuery));
+```
+
+### 在其他方法内调用
+
+现在，`$.customPopup`方法已经是全局可用的，你可以在任何地方通过调用这个方法来显示弹窗，传入你需要的选项：
+
+```javascript
+// 直接调用弹窗
+function someOtherFunction() {
+    $.customPopup({
+        content: '这是从另一个函数触发的弹窗',
+        width: '250px',
+        height: '250px',
+        timeout: 15000, // 15秒后自动关闭
+        onClose: function() {
+            console.log('另一个弹窗已关闭');
+        }
+    });
+}
+```
+
+### 使用场景
+
+你可以在任何需要弹窗的场景下调用`someOtherFunction`函数，或者直接调用`$.customPopup({...})`，这提供了极高的灵活性。例如，你可能在用户完成某些操作后调用它，或者在页面加载完成时调用，或者作为某个异步操作完成后的回调函数调用。
+
+这种方式使得弹窗插件不仅限于响应用户的直接交互（如点击），还可以根据应用程序的逻辑需要在任意时刻触发，使得插件更加通用和灵活。
