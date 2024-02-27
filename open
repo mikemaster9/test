@@ -1,0 +1,79 @@
+要将这种弹窗逻辑封装为一个可重用的插件，可以通过扩展jQuery或使用JavaScript模块化的方法来实现。以下是一个简单的封装示例，采用立即执行函数表达式(IIFE)来创建一个封闭的作用域，避免全局变量污染，并提供一个简洁的API用于显示弹窗。
+
+### 封装为jQuery插件
+
+如果你的项目中使用jQuery，你可以将此功能封装为一个jQuery插件：
+
+```javascript
+(function($) {
+    var isPopupShowing = false; // 跟踪弹窗显示状态
+
+    $.fn.customPopup = function(options) {
+        var settings = $.extend({
+            content: '默认内容',
+            width: '200px',
+            height: '200px',
+            timeout: 20000, // 20秒后自动关闭
+            onClose: null // 关闭回调
+        }, options );
+
+        // 主函数
+        function showPopup(element) {
+            if (isPopupShowing) {
+                console.log("已有弹窗在显示，等待上一个弹窗关闭后再尝试。");
+                return; // 如果已有弹窗在显示，则直接返回
+            }
+
+            isPopupShowing = true; // 标记弹窗正在显示
+
+            // 使用layer展示弹窗
+            layer.open({
+                type: 1,
+                content: settings.content,
+                area: [settings.width, settings.height],
+                offset: 'rb',
+                time: settings.timeout,
+                shade: 0, // 不显示遮罩
+                end: function(){
+                    isPopupShowing = false; // 弹窗关闭，更新状态
+                    if (typeof settings.onClose === 'function') {
+                        settings.onClose(); // 调用关闭回调函数
+                    }
+                }
+            });
+        }
+
+        // 调用主函数
+        return this.each(function() {
+            var $this = $(this); // 当前jQuery对象
+            $this.on('click', function() {
+                showPopup($this); // 绑定点击事件，点击时显示弹窗
+            });
+        });
+    };
+}(jQuery));
+```
+
+### 使用示例
+
+在页面中，假设你有一个按钮，点击时希望显示自定义内容的弹窗：
+
+```html
+<button id="showPopupBtn">显示弹窗</button>
+
+<script>
+$(document).ready(function() {
+    $('#showPopupBtn').customPopup({
+        content: '这是自定义的弹窗内容',
+        width: '200px',
+        height: '200px',
+        timeout: 20000,
+        onClose: function() {
+            console.log('弹窗已关闭');
+        }
+    });
+});
+</script>
+```
+
+这样，你就可以在项目中多次复用这个弹窗功能，只需通过不同的选择器调用`customPopup`插件，并根据需要传入不同的选项即可。通过封装成插件，代码变得更加模块化和可维护，同时也方便在不同项目中复用。
