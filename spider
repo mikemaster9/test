@@ -95,3 +95,75 @@ static void Main()
 
     Application.Run(form);
 }
+
+//==
+using CefSharp;
+using CefSharp.WinForms;
+using System;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using HtmlAgilityPack;
+
+public class AdvancedWebCrawler
+{
+    private ChromiumWebBrowser browser;
+
+    // 用于缓存Cookie
+    private IRequestContext requestContext;
+
+    public AdvancedWebCrawler()
+    {
+        InitializeCefSharp();
+    }
+
+    private void InitializeCefSharp()
+    {
+        var settings = new CefSettings();
+        // 初始化CefSharp的设置
+        Cef.Initialize(settings);
+
+        // 创建一个新的请求上下文，用于独立Cookie管理
+        requestContext = new RequestContext();
+        browser = new ChromiumWebBrowser("", null, requestContext);
+    }
+
+    public async Task LoadPageAsync(string url)
+    {
+        var tcs = new TaskCompletionSource<bool>();
+        EventHandler<LoadingStateChangedEventArgs> handler = null;
+        handler = (sender, args) =>
+        {
+            // 确保页面加载完毕
+            if (!args.IsLoading)
+            {
+                browser.LoadingStateChanged -= handler;
+                tcs.SetResult(true);
+            }
+        };
+
+        browser.LoadingStateChanged += handler;
+        browser.Load(url);
+
+        await tcs.Task; // 等待页面加载完成
+    }
+
+    public async Task<string> GetPageSourceAsync()
+    {
+        return await browser.GetSourceAsync();
+    }
+
+    public async Task<object> ExecuteScriptAsync(string script)
+    {
+        var response = await browser.EvaluateScriptAsync(script);
+        if (response.Success && response.Result != null)
+        {
+            return response.Result;
+        }
+        return null;
+    }
+
+    // 更多方法，如登录、Cookie处理、解析内容等，需要根据具体需求实现
+}
+
+
