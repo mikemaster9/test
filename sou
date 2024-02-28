@@ -78,3 +78,40 @@ class CustomSearchHighlighter {
 document.addEventListener('DOMContentLoaded', (event) => {
     new CustomSearchHighlighter();
 });
+
+using CefSharp.WinForms;
+using System.Windows.Forms;
+
+public void CreateNewTabWithSearch()
+{
+    // 创建新的ChromiumWebBrowser实例
+    var browser = new ChromiumWebBrowser("about:blank");
+    
+    // 创建一个新的TabPage
+    var tabPage = new TabPage("New Tab");
+    tabPage.Controls.Add(browser);
+
+    // 确保浏览器填充整个TabPage
+    browser.Dock = DockStyle.Fill;
+
+    // 添加TabPage到你的TabControl中
+    // 假设你的TabControl名为tabControl
+    tabControl.TabPages.Add(tabPage);
+
+    // 选择新创建的Tab
+    tabControl.SelectedTab = tabPage;
+
+    // 加载包含搜索功能的页面或直接注入搜索功能的JavaScript代码
+    // 这里直接注入JavaScript
+    browser.LoadingStateChanged += (sender, args) =>
+    {
+        if (!args.IsLoading)
+        {
+            // 注入JavaScript代码
+            browser.ExecuteScriptAsync(Properties.Resources.SearchFeatureScript);
+        }
+    };
+
+    // 加载一个初始页面
+    browser.Load("http://your-initial-page.com");
+}
