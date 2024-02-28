@@ -1,0 +1,97 @@
+using CefSharp;
+using CefSharp.WinForms;
+using System;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+public class CefSharpBrowserHelper
+{
+    public ChromiumWebBrowser browser;
+
+    public CefSharpBrowserHelper(string initialUrl)
+    {
+        InitializeCefSharp();
+        CreateBrowserInstance(initialUrl);
+    }
+
+    private void InitializeCefSharp()
+    {
+        var settings = new CefSettings();
+        // 添加更多的CefSharp设置
+        Cef.Initialize(settings);
+    }
+
+    private void CreateBrowserInstance(string url)
+    {
+        browser = new ChromiumWebBrowser(url);
+        // 可以添加更多的浏览器配置，如事件监听
+    }
+
+    public void LoadPage(string url)
+    {
+        browser.Load(url);
+    }
+
+    public Task<string> GetPageSourceAsync()
+    {
+        var taskCompletionSource = new TaskCompletionSource<string>();
+        EventHandler<LoadingStateChangedEventArgs> handler = null;
+        handler = (sender, args) =>
+        {
+            // 确保页面加载完毕
+            if (!args.IsLoading)
+            {
+                browser.LoadingStateChanged -= handler;
+                browser.ViewSource().ContinueWith(t =>
+                {
+                    if (!t.IsFaulted)
+                    {
+                        taskCompletionSource.SetResult(t.Result);
+                    }
+                });
+            }
+        };
+
+        browser.LoadingStateChanged += handler;
+
+        return taskCompletionSource.Task;
+    }
+
+    public Task<object> ExecuteScriptAsync(string script)
+    {
+        return browser.EvaluateScriptAsync(script).ContinueWith(t =>
+        {
+            if (!t.IsFaulted)
+            {
+                var response = t.Result;
+                return response.Success ? response.Result : null;
+            }
+            return null;
+        });
+    }
+
+    public static void Cleanup()
+    {
+        Cef.Shutdown();
+    }
+}
+
+[STAThread]
+static void Main()
+{
+    Application.EnableVisualStyles();
+    Application.SetCompatibleTextRenderingDefault(false);
+
+    var form = new Form();
+    var browserHelper = new CefSharpBrowserHelper("https://www.example.com");
+
+    form.Controls.Add(browserHelper.browser);
+    form.Load += async (sender, args) =>
+    {
+        await Task.Delay(5000); // 等待页面加载
+        var pageSource = await browserHelper.GetPageSourceAsync();
+        Console.WriteLine(pageSource);
+    };
+
+    Application.Run(form);
+}
