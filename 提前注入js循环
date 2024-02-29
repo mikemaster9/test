@@ -1,0 +1,22 @@
+browser.FrameLoadStart += (sender, args) =>
+{
+    if (args.IsMainFrame)
+    {
+        string script = @"
+            (function waitForElement(){
+                if(document.readyState === 'complete') {
+                    var checkExist = setInterval(function() {
+                       if (document.getElementById('yourInputId')) {
+                          console.log('Element exists.');
+                          document.getElementById('yourInputId').value = 'yourValue';
+                          clearInterval(checkExist);
+                       }
+                    }, 100); // check every 100ms
+                } else {
+                    window.requestAnimationFrame(waitForElement);
+                }
+            })();
+        ";
+        browser.ExecuteScriptAsync(script);
+    }
+};
