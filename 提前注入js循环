@@ -20,3 +20,31 @@ browser.FrameLoadStart += (sender, args) =>
         browser.ExecuteScriptAsync(script);
     }
 };
+// 假设这是你的C#变量
+string inputValue = "这里是你的值";
+
+browser.FrameLoadStart += (sender, args) =>
+{
+    if (args.IsMainFrame)
+    {
+        // 使用字符串插值将C#变量的值插入到JavaScript代码中
+        string script = $@"
+            (function waitForElement(){
+                if(document.readyState === 'complete') {
+                    var checkExist = setInterval(function() {
+                        // 使用属性选择器来根据name属性查找input元素
+                        var inputElement = document.querySelector('input[name=""yourInputName""]');
+                        if (inputElement) {
+                            console.log('Element exists.');
+                            inputElement.value = '{inputValue}'; // 为找到的元素赋值，值来自C#变量
+                            clearInterval(checkExist); // 成功后停止检查
+                        }
+                    }, 100); // 每100ms检查一次
+                } else {
+                    window.requestAnimationFrame(waitForElement);
+                }
+            })();
+        ";
+        browser.ExecuteScriptAsync(script);
+    }
+};
