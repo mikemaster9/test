@@ -1,0 +1,74 @@
+public enum LotterySite {
+    EXAMPLE_SITE("http://example.com/lottery/results"),
+    ANOTHER_SITE("http://anotherexample.com/results");
+
+    private final String url;
+
+    LotterySite(String url) {
+        this.url = url;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+}
+
+
+
+
+
+
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+
+public abstract class LotterySpider {
+
+    protected String fetch(LotterySite site) {
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            HttpGet request = new HttpGet(site.getUrl());
+            request.setHeader("User-Agent", "Mozilla/5.0");
+            return EntityUtils.toString(httpClient.execute(request).getEntity());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    protected Document parseHtml(String html) {
+        return Jsoup.parse(html);
+    }
+
+    protected abstract void parse(Document document);
+
+    public void crawl(LotterySite site) {
+        String html = fetch(site);
+        if (html != null) {
+            Document document = parseHtml(html);
+            parse(document);
+        }
+    }
+}
+
+
+
+
+
+public class SpecificLotterySpider extends LotterySpider {
+
+    @Override
+    protected void parse(Document document) {
+        // 根据具体网站结构解析开奖信息
+        // 例如: String winningNumbers = document.select("div.winning-numbers").text();
+        System.out.println("解析开奖信息...");
+    }
+
+    public static void main(String[] args) {
+        SpecificLotterySpider spider = new SpecificLotterySpider();
+        spider.crawl(LotterySite.EXAMPLE_SITE); // 使用枚举选择站点
+    }
+}
+
