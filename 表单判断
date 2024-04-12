@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>区间验证表单</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+<form id="form1">
+  <input type="number" class="mini" placeholder="Min">
+  <input type="number" class="max" placeholder="Max">
+  <div class="error"></div>
+</form>
+<form id="form2">
+  <input type="number" class="mini" placeholder="Min">
+  <input type="number" class="max" placeholder="Max">
+  <div class="error"></div>
+</form>
+<form id="form3">
+  <input type="number" class="mini" placeholder="Min">
+  <input type="number" class="max" placeholder="Max">
+  <div class="error"></div>
+</form>
+<button type="button" id="validate">验证区间</button>
+<script>
+  $(document).ready(function() {
+    $('#validate').click(function() {
+      var intervals = [];
+      var isValid = true;
+      $('form').each(function() {
+        var min = $(this).find('.mini').val();
+        var max = $(this).find('.max').val();
+        if (parseInt(min) >= parseInt(max)) {
+          $(this).find('.error').text('最小值必须小于最大值');
+          isValid = false;
+        } else {
+          $(this).find('.error').empty();
+          intervals.push({min: parseInt(min), max: parseInt(max), form: this});
+        }
+      });
+
+      if (isValid) {
+        for (var i = 0; i < intervals.length; i++) {
+          for (var j = i + 1; j < intervals.length; j++) {
+            if (!(intervals[i].max < intervals[j].min || intervals[i].min > intervals[j].max)) {
+              $(intervals[i].form).find('.error').text('区间有重叠');
+              $(intervals[j].form).find('.error').text('区间有重叠');
+              isValid = false;
+            }
+          }
+        }
+      }
+
+      if (isValid) {
+        alert("所有表单验证通过！");
+      }
+    });
+  });
+</script>
+</body>
+</html>
