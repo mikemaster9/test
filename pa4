@@ -1,0 +1,229 @@
+好的，以下是修改后的完整项目代码，时间过滤逻辑调整为直接按当前时间往前推10分钟，并添加了一些注释和关键日志。
+
+### 完整项目代码
+
+#### 1. `NewsSite` 枚举类
+
+```java
+public enum NewsSite {
+    SITE_A(1, "https://site-a.com/news", "<h1>(.*?)</h1>", "<div class=\"content\">(.*?)</div>"),
+    SITE_B(2, "https://site-b.com/news", "<h2>(.*?)</h2>", "<div class=\"text\">(.*?)</div>"),
+    SITE_C(3, "https://site-c.com/news", "<h3>(.*?)</h3>", "<div class=\"article\">(.*?)</div>");
+
+    private final int priority;
+    private final String url;
+    private final String titleRegex;
+    private final String contentRegex;
+
+    NewsSite(int priority, String url, String titleRegex, String contentRegex) {
+        this.priority = priority;
+        this.url = url;
+        this.titleRegex = titleRegex;
+        this.contentRegex = contentRegex;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public String getTitleRegex() {
+        return titleRegex;
+    }
+
+    public String getContentRegex() {
+        return contentRegex;
+    }
+}
+```
+
+#### 2. `NewsScraperStrategy` 接口
+
+```java
+public interface NewsScraperStrategy {
+    void scrapeNews(NewsSite site);
+}
+```
+
+#### 3. `DefaultNewsScraper` 类
+
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.gargoylesoftware.htmlunit.WebClient;
+import com.gargoylesoftware.htmlunit.html.HtmlPage;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class DefaultNewsScraper implements NewsScraperStrategy {
+    private static final Logger logger = LoggerFactory.getLogger(DefaultNewsScraper.class);
+    private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    @Override
+    public void scrapeNews(NewsSite site) {
+        try (WebClient client = new WebClient()) {
+            // 设置User-Agent
+            String userAgent = UserAgentProvider.getRandomUserAgent();
+            client.getOptions().setJavaScriptEnabled(true);
+            client.addRequestHeader("User-Agent", userAgent);
+
+            // 获取页面并等待JavaScript加载
+            HtmlPage page = client.getPage(site.getUrl());
+            client.waitForBackgroundJavaScript(10000); // 等待最多10秒
+
+            String html = page.asXml();
+            Pattern titlePattern = Pattern.compile(site.getTitleRegex());
+            Pattern contentPattern = Pattern.compile(site.getContentRegex());
+            Matcher titleMatcher = titlePattern.matcher(html);
+            Matcher contentMatcher = contentPattern.matcher(html);
+
+            // 当前时间往前推10分钟
+            LocalDateTime tenMinutesAgo = LocalDateTime.now().minusMinutes(10);
+
+            while (titleMatcher.find() && contentMatcher.find()) {
+                String title = titleMatcher.group(1);
+                String content = contentMatcher.group(1);
+                String publishTime = extractTime(html); // 从HTML中提取发布时间
+
+                LocalDateTime articleTime = LocalDateTime.parse(publishTime, formatter);
+                
+                // 检查发布时间是否在10分钟内
+                if (articleTime.isAfter(tenMinutesAgo)) {
+                    logger.info("New article found: " + title);
+                    logger.info("Content: " + content);
+                    NewsStorage.storeNews(title, content);
+                } else {
+                    logger.info("Article is older than 10 minutes: " + title);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error scraping news from " + site.getUrl(), e);
+        }
+    }
+
+    private String extractTime(String html) {
+        // 解析HTML以提取发布时间，具体实现根据页面结构
+        return "2024-01-01 12:00:00"; // 示例，返回实际的发布时间
+    }
+}
+```
+
+#### 4. `HttpClient` 类
+
+```java
+public class HttpClient {
+    public static String get(String url) {
+        // 这里可以返回HTML内容，如果使用HTMLUnit，具体实现已在DefaultNewsScraper中
+        return ""; // 返回获取的HTML
+    }
+}
+```
+
+#### 5. `NewsStorage` 类
+
+```java
+import java.util.HashSet;
+import java.util.Set;
+
+public class NewsStorage {
+    private static Set<String> scrapedTitles = new HashSet<>();
+
+    public static boolean isNewsAlreadyScraped(String title) {
+        return scrapedTitles.contains(title);
+    }
+
+    public static void storeNews(String title, String content) {
+        scrapedTitles.add(title);
+        // 可以将数据保存到数据库或文件系统
+    }
+}
+```
+
+#### 6. `NewsCrawler` 类
+
+```java
+import java.util.Arrays;
+import java.util.Comparator;
+
+public class NewsCrawler {
+    public void start() {
+        Arrays.stream(NewsSite.values())
+            .sorted(Comparator.comparingInt(NewsSite::getPriority))
+            .parallel()
+            .forEach(site -> {
+                NewsScraperStrategy scraper = NewsScraperFactory.createScraper(site);
+                scraper.scrapeNews(site);
+                if (NewsStorage.isNewsAlreadyScraped(site.getTitleRegex())) {
+                    logger.info("Skipping lower priority sites.");
+                    return;
+                }
+            });
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        NewsCrawler crawler = new NewsCrawler();
+        while (true) {
+            crawler.start();
+            Thread.sleep(60 * 1000); // 每分钟抓取一次
+        }
+    }
+}
+```
+
+#### 7. `UserAgentProvider` 类
+
+```java
+import java.util.Random;
+
+public class UserAgentProvider {
+    private static final String[] USER_AGENTS = {
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/89.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"
+    };
+
+    public static String getRandomUserAgent() {
+        Random random = new Random();
+        return USER_AGENTS[random.nextInt(USER_AGENTS.length)];
+    }
+}
+```
+
+### 关键日志说明
+
+- **新文章发现**：当抓取到新文章时，记录日志以便后续分析。
+- **文章过期**：如果文章的发布时间超过10分钟，记录相关信息。
+- **错误处理**：在抓取过程中捕获异常并记录错误信息，方便调试。
+
+### 依赖
+
+确保在你的项目中添加HTMLUnit和SLF4J的依赖，例如使用Maven：
+
+```xml
+<dependency>
+    <groupId>net.sourceforge.htmlunit</groupId>
+    <artifactId>htmlunit</artifactId>
+    <version>2.58.0</version>
+</dependency>
+<dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-api</artifactId>
+    <version>1.7.32</version>
+</dependency>
+<dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-simple</artifactId>
+    <version>1.7.32</version>
+</dependency>
+```
+
+### 总结
+
+以上代码实现了一个基本的新闻爬虫，支持异步加载、随机User-Agent，并且根据当前时间向前推10分钟进行过滤。希望这些修改和注释能帮助你更好地理解和使用这个项目！如果有其他问题，欢迎随时询问！
