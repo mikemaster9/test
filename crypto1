@@ -141,21 +141,94 @@ public class PriceController {
 }
 ```
 
-### 6. **配置 MyBatis-Plus**
+### 
 
-确保在 `application.yml` 或 `application.properties` 中配置 MyBatis-Plus 和 Redis 的相关信息，例如数据库连接和 Redis 配置。
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
-```yaml
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  type-aliases-package: com.example.demo.entity
+import java.time.LocalDateTime;
+import java.util.List;
 
-spring:
-  redis:
-    host: localhost
-    port: 6379
-```
+@Service
+public class PriceService extends ServiceImpl<PriceRecordMapper, PriceRecord> {
 
-### 总结
+    @Autowired
+    private PriceRecordMapper priceRecordMapper;
 
-通过以上代码，你的应用可以查询特定币种的当前价格和 24 小时前的价格，并计算涨幅。使用 Redis 作为缓存可以提高性能，避免频繁查询数据库。确保在运行之前，数据库表结构与实体类匹配，且已正确配置 MyBatis-Plus 和 Redis。
+    @Autowired
+    private RedisUtil redisUtil;
+
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    // 每分钟执行一次
+    @Scheduled(fixedRate = 60000)
+    public void fetchAndSaveLatestPrices() {
+        String apiUrl = "https://api.example.com/prices"; // 替换为实际的 API URL
+        PriceResponse response = restTemplate.getForObject(apiUrl, PriceResponse.class);
+
+        if (response != null && response.getPrices() != null) {
+            for (PriceResponse.CurrencyPrice currencyPrice : response.getPrices()) {
+                PriceRecord record = new PriceRecord();
+                record.setCurrency(currencyPrice.getCurrency());
+                record.setPrice(currencyPrice.getPrice());
+                record.setTimestamp(LocalDateTime.now());
+                priceRecordMapper.insert(record);
+
+                // 同步更新到 Redis
+                redisUtil.set(currencyPrice.getCurrency(), String.valueOf(currencyPrice.getPrice()), 60);
+            }
+        }
+    }
+
+    public double getPriceChangePercentage(String currency) {
+        String cachedPrice = redisUtil.get(currency);
+        if (cachedPrice != null) {
+            // 从 Redis 获取价格
+            double latestPrice = Double.parseDouble(cachedPrice);
+
+            // 从数据库获取24小时前的价格
+            LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+            LambdaQueryWrapper<PriceRecord> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(PriceRecord::getCurrency, currency)
+                        .lt(PriceRecord::getTimestamp, twentyFourHoursAgo)
+                        .orderByDesc(PriceRecord::getTimestamp)
+                        .last("FETCH FIRST 1 ROWS ONLY");
+
+            PriceRecord previousRecord = priceRecordMapper.selectList(queryWrapper).stream().findFirst().orElse(null);
+            if (previousRecord != null) {
+                double previousPrice = previousRecord.getPrice();
+                return ((latestPrice - previousPrice) / previousPrice) * 100; // 计算涨幅百分比
+            }
+        }
+
+        // 如果 Redis 中没有数据，则从数据库中获取
+        LambdaQueryWrapper<PriceRecord> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(PriceRecord::getCurrency, currency)
+                    .orderByDesc(PriceRecord::getTimestamp)
+                    .last("FETCH FIRST 1 ROWS ONLY");
+
+        PriceRecord latestRecord = priceRecordMapper.selectOne(queryWrapper);
+        if (latestRecord != null) {
+            double latestPrice = latestRecord.getPrice();
+            double previousPrice = getPreviousPrice(currency, twentyFourHoursAgo);
+            return ((latestPrice - previousPrice) / previousPrice) * 100; // 计算涨幅百分比
+        }
+
+        return 0; // 默认返回0%
+    }
+
+    private double getPreviousPrice(String currency, LocalDateTime twentyFourHoursAgo) {
+        LambdaQueryWrapper<PriceRecord> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(PriceRecord::getCurrency, currency)
+                    .lt(PriceRecord::getTimestamp, twentyFourHoursAgo)
+                    .orderByDesc(PriceRecord::getTimestamp)
+                    .last("FETCH FIRST 1 ROWS ONLY");
+
+        PriceRecord previousRecord = priceRecordMapper.selectList(queryWrapper).stream().findFirst().orElse(null);
+        return previousRecord != null ? previousRecord.getPrice() : 0;
+    }
+}
