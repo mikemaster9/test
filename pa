@@ -1,0 +1,246 @@
+下面是一个完整的 Java 项目代码结构，包含定时任务的配置，用于使用 Playwright 抓取新闻的爬虫程序。你可以根据此代码快速搭建项目并运行定时任务。
+
+项目结构
+
+/src
+ └── /main
+      └── /java
+           └── /com
+                └── /example
+                     ├── PlaywrightNewsScraper.java
+                     ├── NewsSite.java
+                     ├── NewsScraperStrategy.java
+                     ├── NewsStorage.java
+                     ├── ScheduledTaskRunner.java
+                     └── App.java
+ └── /resources
+      └── application.properties
+
+1. NewsSite.java - 定义新闻站点和相关配置
+
+package com.example;
+
+public class NewsSite {
+    private final String url;
+    private final String titleRegex;
+    private final String contentRegex;
+
+    public NewsSite(String url, String titleRegex, String contentRegex) {
+        this.url = url;
+        this.titleRegex = titleRegex;
+        this.contentRegex = contentRegex;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public String getTitleRegex() {
+        return titleRegex;
+    }
+
+    public String getContentRegex() {
+        return contentRegex;
+    }
+}
+
+2. NewsScraperStrategy.java - 定义爬虫接口
+
+package com.example;
+
+public interface NewsScraperStrategy {
+    void scrapeNews(NewsSite site);
+}
+
+3. NewsStorage.java - 存储新闻标题避免重复抓取
+
+package com.example;
+
+import java.util.HashSet;
+import java.util.Set;
+
+public class NewsStorage {
+    private static final Set<String> scrapedTitles = new HashSet<>();
+
+    public static boolean isNewsAlreadyScraped(String title) {
+        return scrapedTitles.contains(title);
+    }
+
+    public static void storeNews(String title, String content) {
+        scrapedTitles.add(title);
+        System.out.println("Stored news: " + title);
+    }
+}
+
+4. PlaywrightNewsScraper.java - 轮流使用 Windows 桌面端 User-Agent 抓取新闻
+
+package com.example;
+
+import com.microsoft.playwright.*;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Random;
+
+public class PlaywrightNewsScraper implements NewsScraperStrategy {
+
+    // 只包含 Windows 桌面浏览器的 User-Agent 列表
+    private static final List<String> USER_AGENTS = Arrays.asList(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:91.0) Gecko/20100101 Firefox/91.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.48"
+    );
+
+    private static final Random random = new Random();
+
+    @Override
+    public void scrapeNews(NewsSite site) {
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+
+            String userAgent = getRandomUserAgent();
+
+            Map<String, String> headers = new HashMap<>();
+            headers.put("User-Agent", userAgent);
+            headers.put("Accept-Language", "en-US,en;q=0.9");
+            headers.put("Referer", site.getUrl());
+
+            BrowserContext context = browser.newContext(new Browser.NewContextOptions()
+                    .setExtraHTTPHeaders(headers)
+            );
+
+            Page page = context.newPage();
+            page.navigate(site.getUrl());
+            page.waitForSelector("body");
+
+            String html = page.content();
+
+            Pattern titlePattern = Pattern.compile(site.getTitleRegex());
+            Pattern contentPattern = Pattern.compile(site.getContentRegex());
+
+            Matcher titleMatcher = titlePattern.matcher(html);
+            Matcher contentMatcher = contentPattern.matcher(html);
+
+            while (titleMatcher.find() && contentMatcher.find()) {
+                String title = titleMatcher.group(1);
+                String content = contentMatcher.group(1);
+
+                if (!NewsStorage.isNewsAlreadyScraped(title)) {
+                    System.out.println("New article found: " + title);
+                    NewsStorage.storeNews(title, content);
+                }
+            }
+
+            browser.close();
+        }
+    }
+
+    private String getRandomUserAgent() {
+        return USER_AGENTS.get(random.nextInt(USER_AGENTS.size()));
+    }
+}
+
+5. ScheduledTaskRunner.java - 定时任务配置
+
+package com.example;
+
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+@Component
+public class ScheduledTaskRunner {
+
+    private final NewsScraperStrategy newsScraper;
+
+    public ScheduledTaskRunner(NewsScraperStrategy newsScraper) {
+        this.newsScraper = newsScraper;
+    }
+
+    // 定时任务，每分钟执行一次
+    @Scheduled(fixedRate = 60000)
+    public void runTask() {
+        List<NewsSite> sites = List.of(
+            new NewsSite("https://example-a.com", "<h1>(.*?)</h1>", "<div class=\"content\">(.*?)</div>"),
+            new NewsSite("https://example-b.com", "<title>(.*?)</title>", "<article>(.*?)</article>"),
+            new NewsSite("https://example-c.com", "<h2>(.*?)</h2>", "<p class=\"news-content\">(.*?)</p>")
+        );
+
+        for (NewsSite site : sites) {
+            newsScraper.scrapeNews(site);
+        }
+    }
+}
+
+6. App.java - 主程序入口
+
+package com.example;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class App {
+
+    public static void main(String[] args) {
+        SpringApplication.run(App.class, args);
+    }
+
+    @Bean
+    public NewsScraperStrategy newsScraper() {
+        return new PlaywrightNewsScraper();
+    }
+}
+
+7. application.properties - Spring 定时任务配置
+
+# Spring 的调度任务配置，1分钟间隔执行
+spring.task.scheduling.pool.size=1
+
+运行步骤
+
+	1.	安装依赖：
+在 pom.xml 中添加 Playwright 和 Spring 的依赖。
+
+<dependencies>
+    <!-- Playwright -->
+    <dependency>
+        <groupId>com.microsoft.playwright</groupId>
+        <artifactId>playwright</artifactId>
+        <version>1.24.0</version>
+    </dependency>
+
+    <!-- Spring Boot Starter -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+
+    <!-- Spring Scheduling -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-scheduling</artifactId>
+    </dependency>
+</dependencies>
+
+	2.	配置 Playwright：
+在运行项目之前，确保安装了 Playwright 浏览器驱动：
+
+mvn exec:java -e -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install"
+
+
+	3.	运行项目：
+启动项目，定时任务会根据你设定的时间间隔每分钟运行一次，自动抓取新闻。
+
+mvn spring-boot:run
+
+结论
+
+通过这个项目，你可以实现一个定时任务抓取多个站点新闻的爬虫程序，并通过 Playwright 模拟不同的 User-Agent，有效地防止 IP 封禁和反爬措施。
