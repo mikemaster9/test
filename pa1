@@ -1,0 +1,156 @@
+为了实现你描述的功能，可以采用策略模式（Strategy Pattern）和工厂模式（Factory Pattern）来设计爬虫程序，并使用枚举类来存储网站的配置信息。策略模式允许我们根据不同的网站使用不同的抓取逻辑，而工厂模式可以用来创建具体的抓取策略。此外，通过枚举类配置站点信息和正则表达式，能够有效管理多个网站的抓取规则。
+
+以下是一个简化的Java代码示例，展示了如何设计这个新闻爬虫。
+
+枚举类配置
+
+public enum NewsSite {
+    SITE_A(1, "https://site-a.com/news", "<h1>(.*?)</h1>", "<div class=\"content\">(.*?)</div>"),
+    SITE_B(2, "https://site-b.com/news", "<h2>(.*?)</h2>", "<div class=\"text\">(.*?)</div>"),
+    SITE_C(3, "https://site-c.com/news", "<h3>(.*?)</h3>", "<div class=\"article\">(.*?)</div>");
+
+    private final int priority;
+    private final String url;
+    private final String titleRegex;
+    private final String contentRegex;
+
+    NewsSite(int priority, String url, String titleRegex, String contentRegex) {
+        this.priority = priority;
+        this.url = url;
+        this.titleRegex = titleRegex;
+        this.contentRegex = contentRegex;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public String getTitleRegex() {
+        return titleRegex;
+    }
+
+    public String getContentRegex() {
+        return contentRegex;
+    }
+}
+
+新闻爬虫接口与策略模式
+
+public interface NewsScraperStrategy {
+    void scrapeNews(NewsSite site);
+}
+
+网站爬虫实现类
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class DefaultNewsScraper implements NewsScraperStrategy {
+
+    @Override
+    public void scrapeNews(NewsSite site) {
+        // 模拟用户访问，使用Jsoup或其他库发起请求
+        String html = HttpClient.get(site.getUrl());
+
+        // 使用正则表达式提取新闻标题和内容
+        Pattern titlePattern = Pattern.compile(site.getTitleRegex());
+        Pattern contentPattern = Pattern.compile(site.getContentRegex());
+
+        Matcher titleMatcher = titlePattern.matcher(html);
+        Matcher contentMatcher = contentPattern.matcher(html);
+
+        while (titleMatcher.find() && contentMatcher.find()) {
+            String title = titleMatcher.group(1);
+            String content = contentMatcher.group(1);
+
+            if (!NewsStorage.isNewsAlreadyScraped(title)) {
+                System.out.println("New article found: " + title);
+                System.out.println("Content: " + content);
+                NewsStorage.storeNews(title, content);
+            } else {
+                System.out.println("Article already exists: " + title);
+            }
+        }
+    }
+}
+
+工厂模式创建爬虫
+
+public class NewsScraperFactory {
+
+    public static NewsScraperStrategy createScraper(NewsSite site) {
+        // 可以根据不同网站创建不同策略，目前用默认策略
+        return new DefaultNewsScraper();
+    }
+}
+
+新闻存储类 (用于记录是否已抓取)
+
+import java.util.HashSet;
+import java.util.Set;
+
+public class NewsStorage {
+    private static Set<String> scrapedTitles = new HashSet<>();
+
+    public static boolean isNewsAlreadyScraped(String title) {
+        return scrapedTitles.contains(title);
+    }
+
+    public static void storeNews(String title, String content) {
+        scrapedTitles.add(title);
+        // 可以将数据保存到数据库或文件系统
+    }
+}
+
+主爬虫调度器
+
+import java.util.Arrays;
+import java.util.Comparator;
+
+public class NewsCrawler {
+
+    public void start() {
+        Arrays.stream(NewsSite.values())
+            .sorted(Comparator.comparingInt(NewsSite::getPriority))
+            .forEach(site -> {
+                NewsScraperStrategy scraper = NewsScraperFactory.createScraper(site);
+                scraper.scrapeNews(site);
+
+                // 如果已经抓到新闻，则跳过优先级较低的站点
+                if (NewsStorage.isNewsAlreadyScraped(site.getTitleRegex())) {
+                    System.out.println("Skipping lower priority sites.");
+                    return;
+                }
+            });
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        NewsCrawler crawler = new NewsCrawler();
+        
+        while (true) {
+            crawler.start();
+            Thread.sleep(60 * 1000); // 每分钟抓取一次
+        }
+    }
+}
+
+代码解释
+
+	1.	NewsSite 枚举类：包含每个站点的权重、地址、正则表达式，用于爬虫时的解析。
+	2.	NewsScraperStrategy 接口：定义了一个爬虫策略，允许不同网站可以有不同的抓取方式。
+	3.	DefaultNewsScraper：实现了默认的爬取方式，使用正则表达式解析标题和内容。
+	4.	NewsStorage：用于存储已抓取的新闻标题，避免重复抓取。
+	5.	NewsCrawler：爬虫调度器，按照权重优先抓取新闻，如果高权重站点已抓到，则跳过低权重站点。
+
+改进建议
+
+	1.	增加日志记录：记录每次抓取的情况。
+	2.	异常处理：增加对网络错误、解析错误等的处理。
+	3.	数据库存储：可以将爬取的数据保存到数据库中以便后续处理。
+	4.	用户代理模拟：可以使用 User-Agent 模拟不同浏览器访问，防止封IP。
+
+通过这种封装与设计模式的使用，可以实现高效且可复用的新闻爬虫。
