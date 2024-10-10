@@ -1,0 +1,161 @@
+好的，下面是结合你提供的代码和 Redis 缓存逻辑的完整示例。这个示例使用 MyBatis-Plus 查询当前价格和 24 小时前的价格，并通过 Redis 缓存来提高性能。
+
+### 1. **实体类**
+
+首先，定义一个实体类 `PriceRecord`：
+
+```java
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Data
+@TableName("prices") // 数据库表名
+public class PriceRecord {
+    private Long id;
+    private String currency;
+    private BigDecimal price;
+    private LocalDateTime timestamp;
+}
+```
+
+### 2. **Mapper 接口**
+
+接下来，创建一个 Mapper 接口 `PriceRecordMapper`：
+
+```java
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Select;
+
+public interface PriceRecordMapper extends BaseMapper<PriceRecord> {
+    @Select("SELECT * FROM prices WHERE currency = #{currency} ORDER BY timestamp DESC LIMIT 1")
+    PriceRecord selectLatestPrice(String currency);
+
+    @Select("SELECT * FROM prices WHERE currency = #{currency} AND timestamp <= NOW() - INTERVAL 24 HOUR ORDER BY timestamp DESC LIMIT 1")
+    PriceRecord selectPrice24HoursAgo(String currency);
+}
+```
+
+### 3. **Redis 工具类**
+
+创建一个 Redis 工具类 `RedisUtil`：
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.TimeUnit;
+
+@Component
+public class RedisUtil {
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+    public void set(String key, Object value, long timeout) {
+        redisTemplate.opsForValue().set(key, value, timeout, TimeUnit.SECONDS);
+    }
+
+    public Object get(String key) {
+        return redisTemplate.opsForValue().get(key);
+    }
+
+    public void delete(String key) {
+        redisTemplate.delete(key);
+    }
+}
+```
+
+### 4. **服务类**
+
+创建一个服务类 `PriceService`，用于计算涨幅并使用 Redis 缓存：
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class PriceService {
+
+    @Autowired
+    private PriceRecordMapper priceRecordMapper;
+
+    @Autowired
+    private RedisUtil redisUtil;
+
+    private static final long CACHE_TIMEOUT = 3600; // 缓存有效时间（秒）
+
+    public double getPriceChange(String currency) {
+        // 从 Redis 获取当前和24小时前的价格
+        String currentPriceStr = (String) redisUtil.get("currency:current:" + currency);
+        String previousPriceStr = (String) redisUtil.get("currency:previous:" + currency);
+
+        if (currentPriceStr != null && previousPriceStr != null) {
+            double currentPrice = Double.parseDouble(currentPriceStr);
+            double previousPrice = Double.parseDouble(previousPriceStr);
+            return (currentPrice - previousPrice) / previousPrice * 100; // 涨幅百分比
+        }
+
+        // 如果 Redis 数据缺失，查询数据库
+        PriceRecord currentRecord = priceRecordMapper.selectLatestPrice(currency);
+        PriceRecord previousRecord = priceRecordMapper.selectPrice24HoursAgo(currency);
+
+        if (currentRecord != null) {
+            double currentPrice = currentRecord.getPrice().doubleValue();
+            redisUtil.set("currency:current:" + currency, currentPrice, CACHE_TIMEOUT);
+
+            if (previousRecord != null) {
+                double previousPrice = previousRecord.getPrice().doubleValue();
+                redisUtil.set("currency:previous:" + currency, previousPrice, CACHE_TIMEOUT);
+                return (currentPrice - previousPrice) / previousPrice * 100; // 涨幅百分比
+            }
+        }
+        return 0; // 数据不完整
+    }
+}
+```
+
+### 5. **控制器**
+
+创建一个控制器 `PriceController`，用于处理请求：
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class PriceController {
+
+    @Autowired
+    private PriceService priceService;
+
+    @GetMapping("/price-change/{currency}")
+    public double getPriceChange(@PathVariable String currency) {
+        return priceService.getPriceChange(currency);
+    }
+}
+```
+
+### 6. **配置 MyBatis-Plus**
+
+确保在 `application.yml` 或 `application.properties` 中配置 MyBatis-Plus 和 Redis 的相关信息，例如数据库连接和 Redis 配置。
+
+```yaml
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.example.demo.entity
+
+spring:
+  redis:
+    host: localhost
+    port: 6379
+```
+
+### 总结
+
+通过以上代码，你的应用可以查询特定币种的当前价格和 24 小时前的价格，并计算涨幅。使用 Redis 作为缓存可以提高性能，避免频繁查询数据库。确保在运行之前，数据库表结构与实体类匹配，且已正确配置 MyBatis-Plus 和 Redis。
