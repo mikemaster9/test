@@ -1,0 +1,200 @@
+为了实现你所描述的需求，代码可以遵循策略模式来封装不同网站的解析逻辑，并使用单例模式管理已抓取的新闻数据。此外，定时任务可以通过 ScheduledExecutorService 来执行爬取任务。
+
+以下是一个完整的设计，包含以下模块：
+
+	1.	枚举类 NewsSiteEnum：包含站点的配置信息，如地址和权重。
+	2.	抽象类 NewsParser：每个站点都有自己的解析方法。
+	3.	站点解析类：每个站点继承自 NewsParser，实现不同的解析逻辑。
+	4.	新闻抓取服务 NewsScraperService：控制抓取逻辑，根据权重和时间来决定抓取的顺序。
+	5.	定时任务：每分钟触发一次爬取。
+
+1. 定义站点枚举类 NewsSiteEnum
+
+public enum NewsSiteEnum {
+    SITE_A("https://siteA.com/news", 1),
+    SITE_B("https://siteB.com/news", 2),
+    SITE_C("https://siteC.com/news", 3);
+
+    private String url;
+    private int weight;
+
+    NewsSiteEnum(String url, int weight) {
+        this.url = url;
+        this.weight = weight;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public int getWeight() {
+        return weight;
+    }
+}
+
+2. 定义抽象类 NewsParser
+
+import java.util.List;
+
+public abstract class NewsParser {
+    // 每个站点需要实现的解析方法
+    public abstract List<News> parseNews(String htmlContent);
+
+    // 模拟用户的请求，获取网页内容
+    public String fetchHtml(String url) {
+        // 可以设置 User-Agent 模拟用户行为
+        // 返回该站点的 HTML 页面，使用 Jsoup 或 HttpClient 实现
+        return "";  // 实现获取HTML逻辑
+    }
+
+    // 抓取新闻
+    public List<News> fetchAndParseNews() {
+        String htmlContent = fetchHtml(getSiteUrl());
+        return parseNews(htmlContent);
+    }
+
+    // 获取站点 URL
+    protected abstract String getSiteUrl();
+}
+
+3. 定义新闻类 News
+
+import java.util.Objects;
+
+public class News {
+    private String title;
+    private String content;
+
+    public News(String title, String content) {
+        this.title = title;
+        this.content = content;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        News news = (News) o;
+        return Objects.equals(title, news.title);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(title);
+    }
+}
+
+4. 具体站点解析类（以站点A为例）
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class SiteAParser extends NewsParser {
+
+    @Override
+    public List<News> parseNews(String htmlContent) {
+        List<News> newsList = new ArrayList<>();
+
+        // 使用正则表达式解析新闻标题和内容
+        Pattern pattern = Pattern.compile("<h2>(.*?)</h2>.*?<p>(.*?)</p>", Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(htmlContent);
+
+        while (matcher.find()) {
+            String title = matcher.group(1).trim();
+            String content = matcher.group(2).trim();
+            newsList.add(new News(title, content));
+        }
+
+        return newsList;
+    }
+
+    @Override
+    protected String getSiteUrl() {
+        return NewsSiteEnum.SITE_A.getUrl();
+    }
+}
+
+其他站点 SiteBParser、SiteCParser 可以以类似方式实现，只需修改正则表达式及解析逻辑。
+
+5. 抓取服务 NewsScraperService
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+public class NewsScraperService {
+    // 单例，存储已抓取的新闻标题
+    private Set<String> fetchedNewsTitles = new HashSet<>();
+
+    public void scrapeNews() {
+        // 依次抓取站点，按权重顺序进行
+        for (NewsSiteEnum site : NewsSiteEnum.values()) {
+            NewsParser parser = getParserBySite(site);
+            List<News> newsList = parser.fetchAndParseNews();
+
+            for (News news : newsList) {
+                if (!fetchedNewsTitles.contains(news.getTitle())) {
+                    // 抓取到新新闻，处理并标记
+                    fetchedNewsTitles.add(news.getTitle());
+                    System.out.println("New news fetched from " + site.name() + ": " + news.getTitle());
+                    return;  // 抓取成功，退出循环，不再抓取其他站点
+                }
+            }
+        }
+    }
+
+    // 根据站点返回对应的解析器
+    private NewsParser getParserBySite(NewsSiteEnum site) {
+        switch (site) {
+            case SITE_A:
+                return new SiteAParser();
+            case SITE_B:
+                return new SiteBParser();
+            case SITE_C:
+                return new SiteCParser();
+            default:
+                throw new IllegalArgumentException("Unknown site: " + site);
+        }
+    }
+}
+
+6. 定时任务配置
+
+使用 ScheduledExecutorService 来每分钟触发一次抓取任务。
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+public class NewsScraperScheduler {
+
+    public static void main(String[] args) {
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        NewsScraperService newsScraperService = new NewsScraperService();
+
+        // 每分钟执行一次任务
+        scheduler.scheduleAtFixedRate(newsScraperService::scrapeNews, 0, 1, TimeUnit.MINUTES);
+    }
+}
+
+7. 示例输出
+
+假设有三个站点，权重依次为 SITE_A > SITE_B > SITE_C，站点A抓取到的新闻会优先保存，并且跳过其他站点。
+
+New news fetched from SITE_A: News Title 1
+
+结论
+
+	•	这个设计使用了 策略模式 来处理不同网站的解析逻辑，每个站点可以有独立的解析实现。
+	•	使用了 单例模式 来保存已抓取的新闻，以避免重复抓取。
+	•	定时任务 每分钟执行一次抓取任务，确保新闻数据保持最新。
