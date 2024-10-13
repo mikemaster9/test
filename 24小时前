@@ -1,0 +1,75 @@
+WITH RankedPrices AS (
+    SELECT 
+        币种,
+        价格,
+        createdate,
+        ROW_NUMBER() OVER (PARTITION BY 币种 ORDER BY createdate DESC) AS rn
+    FROM 
+        表a
+    WHERE 
+        createdate <= SYSDATE - INTERVAL '1' DAY
+),
+EarliestPrices AS (
+    SELECT 
+        币种,
+        价格,
+        createdate,
+        ROW_NUMBER() OVER (PARTITION BY 币种 ORDER BY createdate ASC) AS rn
+    FROM 
+        表a
+)
+SELECT 
+    COALESCE(p24.币种, e.币种) AS 币种,
+    COALESCE(p24.价格, e.价格) AS 价格
+FROM 
+    RankedPrices p24
+FULL OUTER JOIN 
+    EarliestPrices e ON p24.币种 = e.币种
+WHERE 
+    p24.rn = 1 OR e.rn = 1;
+
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
+
+@Mapper
+public interface PriceMapper extends BaseMapper<Price> {
+
+    @Select("""
+        WITH RankedPrices AS (
+            SELECT 
+                币种,
+                价格,
+                createdate,
+                ROW_NUMBER() OVER (PARTITION BY 币种 ORDER BY createdate DESC) AS rn
+            FROM 
+                表a
+            WHERE 
+                createdate <= #{time}
+        ),
+        EarliestPrices AS (
+            SELECT 
+                币种,
+                价格,
+                createdate,
+                ROW_NUMBER() OVER (PARTITION BY 币种 ORDER BY createdate ASC) AS rn
+            FROM 
+                表a
+        )
+        SELECT 
+            COALESCE(p24.币种, e.币种) AS 币种,
+            COALESCE(p24.价格, e.价格) AS 价格
+        FROM 
+            RankedPrices p24
+        FULL OUTER JOIN 
+            EarliestPrices e ON p24.币种 = e.币种
+        WHERE 
+            p24.rn = 1 OR e.rn = 1;
+    """)
+    List<PriceDTO> getPrices(@Param("time") String time);
+}
+
