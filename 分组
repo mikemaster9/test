@@ -1,0 +1,33 @@
+import java.util.*;
+import java.util.stream.Collectors;
+
+class Live {
+    private int id;
+    private String content;
+    private String createdAtZh;
+
+    // 构造函数、getter 和 setter 省略
+}
+
+class GroupedLives {
+    private String date;
+    private List<Live> lives;
+
+    // 构造函数、getter 和 setter 省略
+}
+
+public class LiveGrouper {
+    public static List<GroupedLives> groupLivesByDate(List<Live> lives) {
+        return lives.stream()
+                .collect(Collectors.groupingBy(live -> live.getCreatedAtZh().split(" ")[0])) // 按日期分组
+                .entrySet().stream()
+                .map(entry -> {
+                    List<Live> liveList = entry.getValue();
+                    // 按id降序排列
+                    liveList.sort(Comparator.comparingInt(Live::getId).reversed());
+                    return new GroupedLives(entry.getKey(), liveList);
+                })
+                .sorted(Comparator.comparing(GroupedLives::getDate).reversed()) // 按日期降序排列
+                .collect(Collectors.toList());
+    }
+}
