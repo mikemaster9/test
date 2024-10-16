@@ -1,0 +1,236 @@
+如果要多线程抓取新闻内容后，将所有带内容的新闻对象汇总到一个完整的 List 中，第三步再将该 List 中的所有数据批量入库，整个流程可以分为以下步骤：
+
+	1.	调度器：抓取新闻列表。
+	2.	多线程抓取新闻详情：多线程获取新闻的详细内容，线程池处理完后，返回一个包含所有新闻详情的 List。
+	3.	批量入库：统一对抓取完成的新闻数据进行批量入库。
+
+下面是完整的实现方式：
+
+1. 调度器：抓取新闻列表
+
+这个部分保持不变，继续从新闻站点抓取新闻列表。
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class NewsScheduler {
+
+    // 获取新闻列表
+    public List<News> fetchNewsList(String url) {
+        List<News> newsList = new ArrayList<>();
+        try {
+            Document doc = Jsoup.connect(url).get();
+            Elements newsElements = doc.select("div.news-item");  // 根据实际页面结构调整选择器
+
+            for (Element element : newsElements) {
+                String title = element.select("h2.title").text();
+                String newsUrl = element.select("a").attr("abs:href");
+                String time = element.select("span.time").text();
+
+                News news = new News(title, newsUrl, time);
+                newsList.add(news);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return newsList;
+    }
+}
+
+2. 多线程抓取新闻详情并返回带内容的 List
+
+使用 Callable 和 Future 处理多线程任务，并确保任务执行完后，将所有带有内容的新闻对象汇总到一个完整的 List 中。
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
+
+public class NewsSpider {
+
+    private static final int THREAD_COUNT = 8;  // 最大并发线程数
+    private ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
+
+    // 多线程抓取每个新闻详情并返回带有内容的完整新闻列表
+    public List<News> fetchNewsContent(List<News> newsList) {
+        List<Future<News>> futures = new ArrayList<>();
+
+        for (News news : newsList) {
+            Future<News> future = executor.submit(() -> {
+                String content = fetchContent(news.getUrl());
+                if (content != null) {
+                    news.setContent(content);  // 将抓取到的内容设置到新闻对象中
+                }
+                return news;  // 返回带内容的新闻对象
+            });
+            futures.add(future);
+        }
+
+        // 等待所有线程任务完成，并将结果收集到List中
+        List<News> completeNewsList = new ArrayList<>();
+        for (Future<News> future : futures) {
+            try {
+                completeNewsList.add(future.get());  // 获取每个任务的执行结果
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+            }
+        }
+
+        // 关闭线程池
+        shutdownExecutor();
+
+        return completeNewsList;  // 返回包含所有完整新闻的列表
+    }
+
+    // 获取新闻详情内容
+    private String fetchContent(String url) {
+        try {
+            Document doc = Jsoup.connect(url).get();
+            return doc.select("div.article-content").text();  // 根据实际页面结构调整选择器
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    // 关闭线程池
+    private void shutdownExecutor() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+        }
+    }
+}
+
+3. 批量入库
+
+抓取完所有新闻详情后，使用批量操作将所有新闻数据存储到数据库中。
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.List;
+
+public class DatabaseHelper {
+
+    // 数据库连接信息
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/newsdb";
+    private static final String USER = "root";
+    private static final String PASS = "password";
+
+    // 批量保存新闻数据到数据库
+    public void saveNewsToDatabase(List<News> newsList) {
+        String insertSQL = "INSERT INTO news (title, url, time, content) VALUES (?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
+             PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
+
+            for (News news : newsList) {
+                pstmt.setString(1, news.getTitle());
+                pstmt.setString(2, news.getUrl());
+                pstmt.setString(3, news.getTime());
+                pstmt.setString(4, news.getContent());
+                pstmt.addBatch();  // 将操作加入批量执行
+            }
+
+            pstmt.executeBatch();  // 执行批量插入
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+4. 主函数：整合各个部分
+
+在主函数中，将整个流程串联起来：先获取新闻列表，使用多线程抓取新闻详情，最后将数据批量入库。
+
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        // 1. 调度器获取新闻列表
+        NewsScheduler scheduler = new NewsScheduler();
+        List<News> newsList = scheduler.fetchNewsList("https://example.com/news");
+
+        // 2. 多线程抓取新闻详情并返回带有内容的新闻列表
+        NewsSpider spider = new NewsSpider();
+        List<News> completeNewsList = spider.fetchNewsContent(newsList);
+
+        // 3. 将完整的新闻列表批量入库
+        DatabaseHelper dbHelper = new DatabaseHelper();
+        dbHelper.saveNewsToDatabase(completeNewsList);
+    }
+}
+
+完整的新闻实体类 News
+
+为了存储新闻的所有属性，包括标题、URL、时间、内容，News 类可以定义如下：
+
+public class News {
+    private String title;
+    private String url;
+    private String time;
+    private String content;  // 新闻详情内容
+
+    public News(String title, String url, String time) {
+        this.title = title;
+        this.url = url;
+        this.time = time;
+    }
+
+    // Getter and Setter methods
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public String getTime() {
+        return time;
+    }
+
+    public void setTime(String time) {
+        this.time = time;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+}
+
+设计总结
+
+	1.	调度器 (Scheduler)：从新闻站点获取新闻列表，返回包含标题、URL 和发布时间的新闻列表。
+	2.	多线程抓取新闻详情：使用线程池并发抓取每个新闻详情，线程执行完后返回包含新闻内容的完整 List。
+	3.	批量入库：使用 JDBC 的批量操作将新闻内容存入数据库，避免逐条插入，提升性能。
+
+这个设计充分利用了多线程的并发能力，提升了新闻抓取的效率，同时通过批量操作提高了数据库的插入性能。
