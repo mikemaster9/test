@@ -1,0 +1,725 @@
+(function($, window) {
+    // 常量配置
+    const CONFIG = {
+        templates: {
+            orderAmount: `
+                <div class="value-range">
+                    <input type="text" class="form-control" placeholder="最小值">
+                    <span>-</span>
+                    <input type="text" class="form-control" placeholder="最大值">
+                </div>
+            `,
+            transactionTime: `
+                <div class="value-range">
+                    <input type="text" class="form-control laydate-input" placeholder="开始时间" readonly>
+                    <span>-</span>
+                    <input type="text" class="form-control laydate-input" placeholder="结束时间" readonly>
+                </div>
+            `
+        },
+        conditions: {
+            orderAmount: {
+                label: '订单金额',
+                validate: (value) => {
+                    return !isNaN(value.min) && !isNaN(value.max) && Number(value.max) >= Number(value.min);
+                }
+            },
+            transactionTime: {
+                label: '交易时间段',
+                validate: (value) => {
+                    return value.startTime && value.endTime && new Date(value.endTime) >= new Date(value.startTime);
+                }
+            }
+        }
+    };
+
+    class ActivityRules {
+        constructor(containerId, options = {}) {
+            this.containerId = containerId;
+            this.options = {
+                enableValidation: true,
+                maxPreconditions: 5,
+                maxPostconditions: 10,
+                maxConditionsPerGroup: 5,
+                ...options
+            };
+            
+            this.state = {
+                rowCount: 1,
+                preconditionCount: 1,
+                errors: new Map()
+            };
+        }
+
+        // 初始化方法
+        init() {
+            this.addStyles();
+            this.render();
+            this.bindEvents();
+            this.initLaydate();
+            return this;
+        }
+
+        // 添加样式
+        addStyles() {
+            const styles = `
+                #${this.containerId} .table > tbody > tr > td {
+                    vertical-align: middle;
+                }
+                #${this.containerId} .table > thead > tr > th {
+                    background-color: #f5f5f5;
+                    border-bottom: 1px solid #ddd;
+                    vertical-align: middle;
+                    color: #333;
+                    font-weight: bold;
+                }
+                #${this.containerId} .rules-title {
+                    font-size: 14px;
+                    padding: 8px 0;
+                    border-bottom: 1px solid #ddd;
+                    margin-bottom: 15px;
+                }
+                #${this.containerId} .form-control {
+                    font-size: 12px;
+                    height: 30px;
+                    padding: 4px 8px;
+                }
+                #${this.containerId} .btn {
+                    font-size: 12px;
+                    padding: 4px 8px;
+                }
+                #${this.containerId} .value-range {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                #${this.containerId} .value-range .form-control {
+                    width: calc(50% - 8px);
+                    display: inline-block;
+                }
+                #${this.containerId} .container-fluid {
+                    padding: 15px;
+                }
+                #${this.containerId} .table-responsive {
+                    margin-bottom: 20px;
+                }
+                #${this.containerId} .btn-block {
+                    margin-bottom: 0;
+                }
+            `;
+
+            const styleId = `${this.containerId}-styles`;
+            let styleElement = document.getElementById(styleId);
+            
+            if (styleElement) {
+                styleElement.remove();
+            }
+
+            styleElement = document.createElement('style');
+            styleElement.id = styleId;
+            styleElement.textContent = styles;
+            document.head.appendChild(styleElement);
+        }
+
+        // 渲染主体内容
+        render() {
+            $(`#${this.containerId}`).html(this.getMainTemplate());
+            this.updateDeleteButtons();
+        }
+
+        // 获取主模板
+        getMainTemplate() {
+            return `
+                <div class="container-fluid">
+                    <div class="rules-title">活动规则配置</div>
+                    
+                    <!-- 前提条件表格 -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="preconditionTable">
+                            <thead>
+                                <tr>
+                                    <th width="5%">序号</th>
+                                    <th width="10%">条件关系</th>
+                                    <th width="40%">前提条件</th>
+                                    <th width="25%">配置内容</th>
+                                    <th width="20%">
+                                        <button class="btn btn-primary btn-block" id="addPrecondition">
+                                            新增前提条件
+                                        </button>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${this.getPreconditionRowTemplate(1)}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 后置条件表格 -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="conditionTable">
+                            <thead>
+                                <tr>
+                                    <th width="5%">序号</th>
+                                    <th width="10%">条件关系</th>
+                                    <th width="35%">后置条件</th>
+                                    <th width="25%">配置内容</th>
+                                    <th width="10%">操作</th>
+                                    <th width="15%">
+                                        <button class="btn btn-primary btn-block" id="addRow">
+                                            新增条件组
+                                        </button>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${this.getConditionGroupTemplate(1)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 获取前提条件行模板
+        getPreconditionRowTemplate(index) {
+            return `
+                <tr>
+                    <td>${index}</td>
+                    <td>
+                        <select class="form-control relation-select">
+                            <option value="且">且</option>
+                            <option value="或">或</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-control condition-select">
+                            <option value="">请选择</option>
+                            ${this.getConditionOptions()}
+                        </select>
+                    </td>
+                    <td class="config-content"></td>
+                    <td></td>
+                </tr>
+            `;
+        }
+        
+
+        // 获取条件组模板
+        getConditionGroupTemplate(number) {
+            return `
+                <tr data-group="${number}">
+                    <td rowspan="1">${number}</td>
+                    <td rowspan="1">
+                        <select class="form-control relation-select">
+                            <option value="">请选择</option>
+                            <option value="且">且</option>
+                            <option value="或">或</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-control condition-select">
+                            <option value="">请选择</option>
+                            ${this.getConditionOptions()}
+                        </select>
+                    </td>
+                    <td class="config-content"></td>
+                    <td>
+                        <button class="btn btn-primary btn-block add-condition">增加条件</button>
+                    </td>
+                    <td rowspan="1"></td>
+                </tr>
+            `;
+        }
+
+        // 获取条件选项
+        getConditionOptions() {
+            return Object.entries(CONFIG.conditions)
+                .map(([value, {label}]) => `<option value="${value}">${label}</option>`)
+                .join('');
+        }
+
+        // 绑定事件
+        bindEvents() {
+            const $container = $(`#${this.containerId}`);
+
+            // 按钮事件
+            $container.on('click', 'button', (e) => {
+                const $btn = $(e.currentTarget);
+                
+                if ($btn.attr('id') === 'addPrecondition') {
+                    this.addPrecondition();
+                } else if ($btn.attr('id') === 'addRow') {
+                    this.addRow();
+                } else if ($btn.hasClass('delete-precondition')) {
+                    this.deletePrecondition($btn);
+                } else if ($btn.hasClass('add-condition')) {
+                    this.addCondition($btn);
+                } else if ($btn.hasClass('remove-sub')) {
+                    this.removeSubCondition($btn);
+                } else if ($btn.hasClass('delete-group')) {
+                    this.deleteGroup($btn);
+                }
+            });
+
+            // 条件选择事件
+            $container.on('change', '.condition-select', (e) => {
+                this.handleConditionSelect($(e.currentTarget));
+            });
+
+            // 值变更事件
+            $container.on('change', '.value-range input', () => {
+                this.validateAll();
+            });
+        }
+
+        // 初始化日期选择器
+        initLaydate() {
+            $('.laydate-input').each(function() {
+                laydate.render({
+                    elem: this,
+                    type: 'datetime',
+                    format: 'yyyy-MM-dd HH:mm:ss',
+                    trigger: 'click'
+                });
+            });
+        }
+
+        // 处理条件选择
+        handleConditionSelect($select) {
+            const $configCell = $select.closest('tr').find('.config-content');
+            const selectedValue = $select.val();
+            
+            $configCell.html(CONFIG.templates[selectedValue] || '');
+            
+            if (selectedValue === 'transactionTime') {
+                this.initLaydate();
+            }
+
+            this.validateAll();
+        }
+
+        // 添加前提条件
+        addPrecondition() {
+            if (this.state.preconditionCount >= this.options.maxPreconditions) {
+                this.showError('precondition', '已达到最大前提条件数量限制');
+                return;
+            }
+
+            this.state.preconditionCount++;
+            const $tbody = $(`#${this.containerId} #preconditionTable tbody`);
+            $tbody.append(this.getPreconditionRowTemplate(this.state.preconditionCount));
+            this.updateDeleteButtons();
+        }
+
+        // 删除前提条件
+        deletePrecondition($button) {
+            const $tbody = $(`#${this.containerId} #preconditionTable tbody`);
+            if ($tbody.children().length > 1) {
+                $button.closest('tr').remove();
+                this.updateRowNumbers();
+                this.updateDeleteButtons();
+            }
+        }
+
+        // 添加条件组
+        addRow() {
+            if (this.state.rowCount >= this.options.maxPostconditions) {
+                this.showError('postcondition', '已达到最大后置条件组数量限制');
+                return;
+            }
+
+            this.state.rowCount++;
+            const $tbody = $(`#${this.containerId} #conditionTable tbody`);
+            $tbody.append(this.getConditionGroupTemplate(this.state.rowCount));
+            this.updateDeleteButtons();
+        }
+
+        // 添加组内条件
+        addCondition($button) {
+            const $row = $button.closest('tr');
+            const $firstRow = this.getGroupFirstRow($row);
+            const groupId = $firstRow.data('group');
+            const $groupRows = this.getRowsInGroup($firstRow);
+
+            if ($groupRows.length >= this.options.maxConditionsPerGroup) {
+                this.showError(`group-${groupId}`, '已达到组内最大条件数量限制');
+                return;
+            }
+
+            const $newRow = $(`
+                <tr data-group="${groupId}">
+                    <td>
+                        <select class="form-control condition-select">
+                            <option value="">请选择</option>
+                            ${this.getConditionOptions()}
+                        </select>
+                    </td>
+                    <td class="config-content"></td>
+                    <td>
+                        <button class="btn btn-danger btn-block remove-sub">移除条件</button>
+                    </td>
+                </tr>
+            `);
+            
+            $row.after($newRow);
+            
+            $firstRow.find('td[rowspan]').each(function() {
+                const currentRowspan = parseInt($(this).attr('rowspan'));
+                $(this).attr('rowspan', currentRowspan + 1);
+            });
+        }
+
+        // 移除组内条件
+        removeSubCondition($button) {
+            const $row = $button.closest('tr');
+            const $firstRow = this.getGroupFirstRow($row);
+            const $rowsInGroup = this.getRowsInGroup($firstRow);
+            
+            if ($rowsInGroup.length > 1) {
+                $firstRow.find('td[rowspan]').each(function() {
+                    const currentRowspan = parseInt($(this).attr('rowspan'));
+                    $(this).attr('rowspan', currentRowspan - 1);
+                });
+                
+                $row.remove();
+            }
+        }
+
+        // 删除条件组
+        deleteGroup($button) {
+            const $tbody = $(`#${this.containerId} #conditionTable tbody`);
+            const totalGroups = $tbody.find('tr[data-group]').first().siblings('tr[data-group]').addBack().length;
+            
+            if (totalGroups > 1) {
+                const $firstRow = this.getGroupFirstRow($button.closest('tr'));
+                const $rowsInGroup = this.getRowsInGroup($firstRow);
+                $rowsInGroup.remove();
+                
+                this.updateGroupNumbers();
+                this.updateDeleteButtons();
+            }
+        }
+
+        // 更新组编号
+        updateGroupNumbers() {
+            let number = 1;
+            const $tbody = $(`#${this.containerId} #conditionTable tbody`);
+            const groups = new Set();
+            
+            $tbody.find('tr').each(function() {
+                const $firstCell = $(this).find('td:first-child');
+                if ($firstCell.attr('rowspan')) {
+                    $firstCell.text(number);
+                    groups.add($(this).data('group'));
+                    number++;
+                }
+            });
+            
+            this.state.rowCount = groups.size;
+        }
+
+        // 更新行号
+        updateRowNumbers() {
+            $(`#${this.containerId} #preconditionTable tbody tr`).each(function(index) {
+                $(this).find('td:first-child').text(index + 1);
+            });
+            this.state.preconditionCount = $(`#${this.containerId} #preconditionTable tbody tr`).length;
+        }
+
+        // 获取组的第一行
+        getGroupFirstRow($row) {
+            let $currentRow = $row;
+            while ($currentRow.prev().length && !$currentRow.find('td[rowspan]').length) {
+                $currentRow = $currentRow.prev();
+            }
+            return $currentRow;
+        }
+
+        // 获取组内所有行
+        getRowsInGroup($firstRow) {
+            const groupId = $firstRow.data('group');
+            const $rows = $();
+            let $currentRow = $firstRow;
+            
+            while ($currentRow.length && $currentRow.data('group') === groupId) {
+                $rows.push($currentRow[0]);
+                $currentRow = $currentRow.next();
+            }
+            
+            return $rows;
+        }
+
+        // 更新删除按钮状态
+        updateDeleteButtons() {
+            this.updateDeletePreconditionButtons();
+            this.updateDeleteGroupButtons();
+        }
+
+        // 更新前提条件删除按钮
+        updateDeletePreconditionButtons() {
+            const $rows = $(`#${this.containerId} #preconditionTable tbody tr`);
+            $rows.find('.delete-precondition').closest('td').empty();
+            if ($rows.length > 1) {
+                $rows.not(':first').each(function() {
+                    const $lastCell = $(this).find('td:last');
+                    $lastCell.html('<button class="btn btn-danger btn-block delete-precondition">删除条件</button>');
+                });
+            }
+        }
+
+        // 更新条件组删除按钮
+        updateDeleteGroupButtons() {
+            const $groups = $(`#${this.containerId} #conditionTable tbody tr[data-group]`);
+            const $firstRows = $groups.filter(function() {
+                return $(this).find('td[rowspan]').length > 0;
+            });
+            
+            $groups.find('.delete-group').closest('td[rowspan]').empty();
+            
+            if ($firstRows.length > 1) {
+                $firstRows.not(':first').each(function() {
+                    $(this).find('td[rowspan]:last').html('<button class="btn btn-danger btn-block delete-group">删除条件组</button>');
+                });
+            }
+        }
+
+        // 验证所有数据
+        validateAll() {
+            if (!this.options.enableValidation) return true;
+            
+            this.state.errors.clear();
+            let isValid = true;
+
+            // 验证前提条件
+            $(`#${this.containerId} #preconditionTable tbody tr`).each((index, row) => {
+                const validation = this.validateRow($(row));
+                if (!validation.valid) {
+                    isValid = false;
+                    this.showError(`precondition-${index + 1}`, validation.message);
+                }
+            });
+
+            // 验证后置条件
+            $(`#${this.containerId} #conditionTable tbody tr`).each((index, row) => {
+                const validation = this.validateRow($(row));
+                if (!validation.valid) {
+                    isValid = false;
+                    this.showError(`postcondition-${index + 1}`, validation.message);
+                }
+            });
+
+            return isValid;
+        }
+
+        // 验证单行数据
+        validateRow($row) {
+            const type = $row.find('.condition-select').val();
+            if (!type) {
+                return { valid: false, message: '请选择条件类型' };
+            }
+
+            const condition = CONFIG.conditions[type];
+            if (!condition) {
+                return { valid: false, message: '无效的条件类型' };
+            }
+
+            const config = this.getRowConfig($row, type);
+            if (!condition.validate(config)) {
+                return { valid: false, message: '配置值无效' };
+            }
+
+            return { valid: true };
+        }
+
+        // 显示错误信息
+        showError(key, message) {
+            this.state.errors.set(key, message);
+            // 可以在这里添加错误提示UI的实现
+            console.error(`Error [${key}]:`, message);
+        }
+
+        // 获取规则数据
+        getData() {
+            if (this.options.enableValidation && !this.validateAll()) {
+                throw new Error('数据验证失败');
+            }
+
+            const result = {
+                preconditions: [],
+                postconditions: []
+            };
+            
+            // 获取前提条件数据
+            $(`#${this.containerId} #preconditionTable tbody tr`).each((index, row) => {
+                const $row = $(row);
+                const type = $row.find('.condition-select').val();
+                if (!type) return;
+
+                const condition = {
+                    relation: $row.find('.relation-select').val(),
+                    type: type,
+                    config: this.getRowConfig($row, type)
+                };
+                
+                result.preconditions.push(condition);
+            });
+            
+            // 获取后置条件数据
+            let currentGroup = null;
+            $(`#${this.containerId} #conditionTable tbody tr`).each((index, row) => {
+                const $row = $(row);
+                const type = $row.find('.condition-select').val();
+                if (!type) return;
+
+                if ($row.find('td[rowspan]').length > 0) {
+                    if (currentGroup) {
+                        result.postconditions.push(currentGroup);
+                    }
+                    currentGroup = {
+                        relation: $row.find('.relation-select').val(),
+                        conditions: []
+                    };
+                }
+
+                const condition = {
+                    type: type,
+                    config: this.getRowConfig($row, type)
+                };
+                
+                if (currentGroup) {
+                    currentGroup.conditions.push(condition);
+                }
+            });
+            
+            if (currentGroup) {
+                result.postconditions.push(currentGroup);
+            }
+            
+            return result;
+        }
+
+        // 获取行配置数据
+        getRowConfig($row, type) {
+            const $inputs = $row.find('.value-range input');
+            switch(type) {
+                case 'orderAmount':
+                    return {
+                        min: $inputs.eq(0).val(),
+                        max: $inputs.eq(1).val()
+                    };
+                case 'transactionTime':
+                    return {
+                        startTime: $inputs.eq(0).val(),
+                        endTime: $inputs.eq(1).val()
+                    };
+                default:
+                    return {};
+            }
+        }
+
+        // 加载规则数据
+        loadRuleData(data) {
+            if (!data) return;
+    
+            // 清空现有数据
+            $(`#${this.containerId} #preconditionTable tbody`).empty();
+            $(`#${this.containerId} #conditionTable tbody`).empty();
+            
+            // 重置计数器
+            this.state.preconditionCount = 0;
+            this.state.rowCount = 0;
+            
+            // 加载前提条件
+            if (data.preconditions && Array.isArray(data.preconditions)) {
+                data.preconditions.forEach((precondition, index) => {
+                    this.state.preconditionCount++;
+                    const $row = $(this.getPreconditionRowTemplate(this.state.preconditionCount));
+                    
+                    // 确保设置关系值
+                    if (index === 0) {
+                        // 第一个条件默认关系为"且"
+                        precondition.relation = "且";
+                    }
+                    
+                    this.setRowData($row, precondition);
+                    $(`#${this.containerId} #preconditionTable tbody`).append($row);
+                });
+            }
+            
+            // 加载后置条件
+            if (data.postconditions && Array.isArray(data.postconditions)) {
+                data.postconditions.forEach((group, groupIndex) => {
+                    this.state.rowCount++;
+                    const groupId = this.state.rowCount;
+
+                    group.conditions.forEach((condition, index) => {
+                        const $row = index === 0 
+                            ? $(this.getConditionGroupTemplate(groupId))
+                            : $(`
+                                <tr data-group="${groupId}">
+                                    <td>
+                                        <select class="form-control condition-select">
+                                            <option value="">请选择</option>
+                                            ${this.getConditionOptions()}
+                                        </select>
+                                    </td>
+                                    <td class="config-content"></td>
+                                    <td>
+                                        <button class="btn btn-danger btn-block remove-sub">移除条件</button>
+                                    </td>
+                                </tr>
+                            `);
+
+                        if (index === 0) {
+                            $row.find('.relation-select').val(group.relation);
+                            $row.find('td:eq(0),td:eq(1)').attr('rowspan', group.conditions.length);
+                        }
+
+                        this.setRowData($row, condition);
+                        $(`#${this.containerId} #conditionTable tbody`).append($row);
+                    });
+                });
+            }
+
+            this.updateDeleteButtons();
+            this.initLaydate();
+            this.validateAll();
+        }
+
+        // 设置行数据
+        setRowData($row, data) {
+            // 设置条件类型
+            $row.find('.condition-select').val(data.type);
+            
+            // 设置条件关系 (如果存在)
+            if(data.relation) {
+                $row.find('.relation-select').val(data.relation);
+            }
+            
+            // 设置配置内容
+            const $configCell = $row.find('.config-content');
+            $configCell.html(CONFIG.templates[data.type] || '');
+            
+            const $inputs = $configCell.find('.value-range input');
+            if (data.config) {
+                switch(data.type) {
+                    case 'orderAmount':
+                        $inputs.eq(0).val(data.config.min);
+                        $inputs.eq(1).val(data.config.max);
+                        break;
+                    case 'transactionTime':
+                        $inputs.eq(0).val(data.config.startTime);
+                        $inputs.eq(1).val(data.config.endTime);
+                        break;
+                }
+            }
+        }
+        
+    }
+
+    // 暴露到全局
+    window.ActivityRules = ActivityRules;
+
+})(jQuery, window);
+        
