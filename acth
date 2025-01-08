@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>活动规则配置演示</title>
+    <!-- 引入Bootstrap CSS -->
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/3.4.1/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入laydate CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/layui-laydate@5.3.1/src/theme/default/laydate.css" rel="stylesheet">
+   
+</head>
+<body>
+    <!-- 容器div -->
+    <div id="activityRulesContainer"></div>
+
+    <div class="container-fluid">
+        <div class="text-center" style="margin-top: 20px;">
+            <button class="btn btn-success" id="testGetData">获取规则数据</button>
+            <button class="btn btn-primary" id="testLoadData">测试加载数据</button>
+        </div>
+    </div>
+
+    <!-- 引入必要的JS库 -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/layui-laydate@5.3.1/src/laydate.js"></script>
+    <!-- 引入活动规则组件 -->
+    <script src="./activityRules.js"></script>
+    <!-- 初始化组件 -->
+    <script>
+        $(document).ready(function() {
+           
+            const rules = new ActivityRules('activityRulesContainer', {
+                enableValidation: true,
+                maxPreconditions: 5,
+                maxPostconditions: 10,
+                maxConditionsPerGroup: 5
+            }).init();
+
+            $('#testGetData').click(function() {
+                // 获取规则数据
+                const rulesData = rules.getData();
+                
+                // 格式化显示数据
+                const formattedData = JSON.stringify(rulesData, null, 2);
+
+                // 同时在控制台打印
+                console.log('活动规则数据：', rulesData);
+            });
+
+            // 绑定加载数据按钮事件
+            $('#testLoadData').click(function() {
+                // 模拟从接口获取的数据
+                // 规则数据示例
+                const ruleData = {
+                    // 前提条件数组
+                    preconditions: [
+                        {
+                            relation: "且", // 条件关系：且/或
+                            type: "orderAmount", // 条件类型
+                            config: {
+                                min: "100",
+                                max: "1000"
+                            }
+                        },
+                        {
+                            relation: "或",
+                            type: "transactionTime",
+                            config: {
+                                startTime: "2025-01-01 00:00:00",
+                                endTime: "2025-12-31 23:59:59"
+                            }
+                        }
+                    ],
+                    
+                    // 后置条件组数组
+                    postconditions: [
+                        {
+                            // 第一组条件
+                            relation: "且", // 组间关系
+                            conditions: [
+                                {
+                                    type: "orderAmount",
+                                    config: {
+                                        min: "500",
+                                        max: "2000"
+                                    }
+                                },
+                                {
+                                    type: "transactionTime",
+                                    config: {
+                                        startTime: "2025-01-01 00:00:00",
+                                        endTime: "2025-06-30 23:59:59"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            // 第二组条件
+                            relation: "或",
+                            conditions: [
+                                {
+                                    type: "orderAmount",
+                                    config: {
+                                        min: "2000",
+                                        max: "5000"
+                                    }
+                                },
+                                {
+                                    type: "transactionTime",
+                                    config: {
+                                        startTime: "2025-07-01 00:00:00",
+                                        endTime: "2025-12-31 23:59:59"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                };
+
+
+                // 使用模拟数据加载
+                rules.loadRuleData(ruleData);
+            });
+        });
+    </script>
+</body>
+</html>
