@@ -1,0 +1,30 @@
+@Override
+public InputStream fileDownload(String fileName, String productId) throws Exception {
+    if (StringUtils.isBlank(fileName)) {
+        return null;
+    }
+
+    String newFileName = fileName;
+    log.info("开始 fileDownload fileName={}", fileName);
+
+    if (newFileName.contains(NEW_UPLOAD_FLAG) || newFileName.contains(ENCRYPT_UPLOAD_FLAG)) {
+        try {
+            byte[] buffer = this.downloadFromS3(newFileName);
+            if (newFileName.contains(ENCRYPT_UPLOAD_FLAG)) {
+                // 如果文件需要解密，则解密后覆盖 buffer
+                buffer = this.decryptFile(buffer);
+            }
+            log.info("完成 fileDownload fileName={}", fileName);
+            // 将字节数组转换为 InputStream 返回
+            return new ByteArrayInputStream(buffer);
+        } catch (Exception e) {
+            log.error("下载文件失败, bucketName: {}, fileName: {}, newFileName: {}, msg: {}", 
+                      ossBucket, fileName, newFileName, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    // 如果不是新上传标识文件，走旧逻辑
+    byte[] body = this.download(fileName, productId);
+    return new ByteArrayInputStream(body);
+}
