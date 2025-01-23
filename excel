@@ -1,0 +1,68 @@
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class ExcelOrderStatistics {
+
+    public static void main(String[] args) {
+        String excelFilePath = "path_to_your_file.xlsx"; // 替换为实际路径
+        try (FileInputStream fis = new FileInputStream(excelFilePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            // 获取第一个工作表
+            Sheet sheet = workbook.getSheetAt(0);
+
+            // 定义统计变量
+            int count5 = 0, count10 = 0, count15 = 0, count20 = 0;
+            int countOver20 = 0, countOver30 = 0;
+
+            // 遍历每一行（跳过标题行）
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                // 获取交易时间和极速完成时间
+                String tradeTime = row.getCell(7).getStringCellValue(); // 假设交易时间在第8列 (G)
+                String completeTime = row.getCell(8).getStringCellValue(); // 假设极速完成时间在第9列 (H)
+
+                // 计算耗时（分钟）
+                long duration = calculateDuration(tradeTime, completeTime);
+                if (duration <= 5) count5++;
+                if (duration <= 10) count10++;
+                if (duration <= 15) count15++;
+                if (duration <= 20) count20++;
+                if (duration > 20) countOver20++;
+                if (duration > 30) countOver30++;
+            }
+
+            // 输出统计结果
+            System.out.println("耗时 <= 5分钟的订单数: " + count5);
+            System.out.println("耗时 <= 10分钟的订单数: " + count10);
+            System.out.println("耗时 <= 15分钟的订单数: " + count15);
+            System.out.println("耗时 <= 20分钟的订单数: " + count20);
+            System.out.println("耗时 > 20分钟的订单数: " + countOver20);
+            System.out.println("耗时 > 30分钟的订单数: " + countOver30);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // 计算两个时间之间的分钟差
+    private static long calculateDuration(String start, String end) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+            Date startDate = sdf.parse(start);
+            Date endDate = sdf.parse(end);
+            long diff = endDate.getTime() - startDate.getTime(); // 毫秒差
+            return diff / (1000 * 60); // 转为分钟
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1; // 异常时返回无效值
+        }
+    }
+}
