@@ -1,0 +1,30 @@
+$(document).ready(function () {
+    // 定义需要移除的选项值
+    const removeOptions = ['3', '4']; // "买币商户"对应的value是3，"卖币商户"对应的value是4
+
+    // 定义一个函数，移除相关的 option 和 li
+    function removeOptionsAndListItems() {
+        // 移除 select 中的 option
+        $('select[name="userType"] option').each(function () {
+            if (removeOptions.includes($(this).val())) {
+                $(this).remove();
+            }
+        });
+
+        // 移除下拉菜单中的 li
+        $('.dropdown-menu li a').each(function () {
+            const text = $(this).find('.text').text().trim();
+            if (text === '买币商户' || text === '卖币商户') {
+                $(this).closest('li').remove();
+            }
+        });
+    }
+
+    // 初始调用
+    removeOptionsAndListItems();
+
+    // 监听动态生成的情况，确保每次都检查
+    $(document).on('DOMNodeInserted', '.dropdown-menu', function () {
+        removeOptionsAndListItems();
+    });
+});
