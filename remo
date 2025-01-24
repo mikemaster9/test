@@ -4,27 +4,30 @@ $(document).ready(function () {
 
     // 定义一个函数，移除相关的 option 和 li
     function removeOptionsAndListItems() {
-        // 移除 select 中的 option
-        $('select[name="userType"] option').each(function () {
+        // 通过 #userType 找到对应的 select 元素并移除指定的 option
+        $('#userType option').each(function () {
             if (removeOptions.includes($(this).val())) {
                 $(this).remove();
             }
         });
 
-        // 移除下拉菜单中的 li
-        $('.dropdown-menu li a').each(function () {
-            const text = $(this).find('.text').text().trim();
-            if (text === '买币商户' || text === '卖币商户') {
-                $(this).closest('li').remove();
-            }
-        });
+        // 通过 #userType 找到对应的下拉菜单，移除指定的 li
+        $('#userType')
+            .closest('.dropdown') // 找到与 select 关联的下拉容器
+            .find('.dropdown-menu li a')
+            .each(function () {
+                const text = $(this).find('.text').text().trim();
+                if (text === '买币商户' || text === '卖币商户') {
+                    $(this).closest('li').remove();
+                }
+            });
     }
 
     // 初始调用
     removeOptionsAndListItems();
 
     // 监听动态生成的情况，确保每次都检查
-    $(document).on('DOMNodeInserted', '.dropdown-menu', function () {
+    $(document).on('DOMNodeInserted', '#userType', function () {
         removeOptionsAndListItems();
     });
 });
