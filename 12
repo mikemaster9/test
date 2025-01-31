@@ -1,0 +1,49 @@
+// 获取图片插件中的图片（假设为base64编码的形式）
+function getImagePluginImages() {
+    return $(".image-uploader .image-item img")
+        .map(function () {
+            return this.src.startsWith("data:image") ? this.src : null;
+        })
+        .get();  // 返回数组
+}
+
+// 获取指定容器内的所有表单元素并构建params对象
+function getFormParams(containerId) {
+    const params = new FormData();
+    const $container = $("#" + containerId);  // 缓存容器查询
+
+    // 获取容器内所有的input, textarea, select元素
+    $container.find("input, textarea, select").each(function () {
+        const name = this.name;
+        const value = this.value;
+
+        // 如果name不为空，则将name和value添加到FormData中
+        if (name && value) {
+            params.append(name, value);
+        }
+    });
+
+    // 处理图片插件的图片（假设为base64编码的形式，转换为文件上传）
+    const images = getImagePluginImages();  // 获取图片插件的图片（base64数据）
+    
+    images.forEach((image, index) => {
+        const [mimeType, base64Data] = image.split(";");  // 解构获取MIME类型
+        const type = mimeType.split(":")[1];  // 获取MIME类型
+        const byteString = atob(base64Data.split(",")[1]);  // 解码Base64数据
+        const ab = new Uint8Array(byteString.length);
+
+        // 填充Uint8Array
+        for (let i = 0; i < byteString.length; i++) {
+            ab[i] = byteString.charCodeAt(i);
+        }
+
+        // 创建Blob对象
+        const file = new Blob([ab], { type: type });  // 使用正确的MIME类型
+        file.name = `image_${index + 1}.${type.split("/")[1]}`;  // 设置文件名
+
+        // 将图片文件添加到FormData中
+        params.append('images', file, file.name);
+    });
+
+    return params;
+}
