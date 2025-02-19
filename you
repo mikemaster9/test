@@ -1,0 +1,52 @@
+这段SQL查询的主要目的是从`T_EXCHANGE_RATE_RECORD`表中获取每种货币的最新汇率和最早汇率，并进行合并。虽然查询逻辑正确，但在性能上可能存在以下问题：
+
+### 问题分析
+1. **子查询重复扫描表**：`RankedPrices`和`EarliestPrices`两个子查询都扫描了`T_EXCHANGE_RATE_RECORD`表，导致表被扫描两次。
+2. **窗口函数计算开销**：`ROW_NUMBER()`窗口函数需要对数据进行排序和分区，如果数据量较大，计算开销会很高。
+3. **`FULL OUTER JOIN`开销**：`FULL OUTER JOIN`需要对两个子查询的结果进行全外连接，如果数据量较大，连接操作的开销会很高。
+4. **`CREATED_DATE`条件**：`CREATED_DATE <= SYSDATE - INTERVAL '24' HOUR`条件可能无法有效利用索引，导致查询效率低下。
+
+### 优化建议
+1. **减少表扫描次数**：通过一次扫描表，同时计算最新和最早的汇率。
+2. **优化窗口函数**：尽量减少窗口函数的计算范围，或者考虑使用其他方法替代。
+3. **优化连接操作**：如果可能，尽量避免使用`FULL OUTER JOIN`，或者确保连接条件能够有效利用索引。
+4. **索引优化**：确保`BASE_CURRENCY`和`CREATED_DATE`字段上有合适的索引。
+
+### 优化后的SQL
+```sql
+WITH CombinedData AS (
+    SELECT
+        BASE_CURRENCY,
+        RATE,
+        CREATED_DATE,
+        ROW_NUMBER() OVER (PARTITION BY BASE_CURRENCY ORDER BY CREATED_DATE DESC) AS rn_desc,
+        ROW_NUMBER() OVER (PARTITION BY BASE_CURRENCY ORDER BY CREATED_DATE ASC) AS rn_asc
+    FROM
+        T_EXCHANGE_RATE_RECORD
+    WHERE
+        CREATED_DATE <= SYSDATE - INTERVAL '24' HOUR
+)
+SELECT
+    COALESCE(rp.BASE_CURRENCY, ep.BASE_CURRENCY) AS baseCurrency,
+    COALESCE(rp.RATE, ep.RATE) AS rate
+FROM
+    (SELECT BASE_CURRENCY, RATE FROM CombinedData WHERE rn_desc = 1) rp
+FULL OUTER JOIN
+    (SELECT BASE_CURRENCY, RATE FROM CombinedData WHERE rn_asc = 1) ep
+ON
+    rp.BASE_CURRENCY = ep.BASE_CURRENCY
+WHERE
+    rp.BASE_CURRENCY IS NOT NULL OR ep.BASE_CURRENCY IS NOT NULL;
+```
+
+### 解释
+1. **`CombinedData`子查询**：通过一次扫描表，同时计算最新和最早的汇率，减少表扫描次数。
+2. **`ROW_NUMBER()`优化**：在同一个子查询中计算`rn_desc`和`rn_asc`，减少窗口函数的计算开销。
+3. **`FULL OUTER JOIN`**：仍然使用`FULL OUTER JOIN`，但确保连接条件能够有效利用索引。
+
+### 索引建议
+```sql
+CREATE INDEX idx_exchange_rate_record ON T_EXCHANGE_RATE_RECORD (BASE_CURRENCY, CREATED_DATE);
+```
+
+通过以上优化，查询性能应该会有所提升。如果数据量非常大，还可以考虑进一步优化，例如分区表或物化视图。
